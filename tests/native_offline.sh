@@ -32,7 +32,6 @@ window=$(timeout 20 xdotool search --sync --onlyvisible --name '^Xtrifid$' | hea
 test -n "$window"
 xdotool windowfocus --sync "$window"
 # Coordinates are in the actual GTK window on the fixed-size private display.
-xdotool mousemove --window "$window" 260 170 click 1 key Home Down Down Return
 xdotool mousemove --window "$window" 140 109 click 1
 prompt='Создай один прямоугольный брусок без других деталей. Размер по X 40 см, по Y 20 см, по Z 10 см. Без поворота, нижняя грань лежит на полу.'
 printf %s "$prompt" | xclip -selection clipboard -in
@@ -45,7 +44,20 @@ until [ "$(timeout 1 xclip -selection primary -out 2>/dev/null || :)" = "$prompt
     sleep 0.1
 done
 echo "Verified the UTF-8 prompt in the GTK entry."
-xdotool key Return
+# GTK puts the four detail choices on a separate X11 popup surface.
+xdotool mousemove --window "$window" 260 170 click 1
+step=0
+popup=
+until [ -n "$popup" ]; do
+    for candidate in $(xdotool search --onlyvisible --name '^[Xx]trifid$'); do
+        if [ "$candidate" != "$window" ]; then popup=$candidate; break; fi
+    done
+    step=$((step + 1))
+    [ "$step" -lt 100 ] || { echo 'Detail selector did not open' >&2; exit 1; }
+    if [ -z "$popup" ]; then sleep 0.05; fi
+done
+xdotool mousemove --window "$popup" 60 90 click 1
+xdotool mousemove --window "$window" 140 213 click 1
 
 # The export button becomes sensitive when generation creates the first scene.
 step=0
