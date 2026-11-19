@@ -41,10 +41,18 @@ def descendants(widget):
 
 
 def lookup(container, role, name):
-    return next(
-        (w for w in descendants(container) if w.getRoleName() == role and w.name == name),
-        None,
-    )
+    from gi.repository import GLib
+
+    try:
+        return next(
+            (w for w in descendants(container) if w.getRole() == role and w.name == name),
+            None,
+        )
+    except GLib.Error as error:
+        # GTK may destroy a popup row between enumeration and the remote AT-SPI read.
+        if "does not exist" in error.message:
+            return None
+        raise
 
 
 def check_obj(path, expected_size, expected_faces):
@@ -187,8 +195,8 @@ def exercise(binary, work, generate):
         print(f"Preview: {count} mesh-coloured pixels in the viewport", flush=True)
 
     def export(name, size, faces):
-        click(expect(frame, "push button", "Экспорт OBJ"))
-        click(expect(desktop, "push button", "Save"))
+        click(expect(frame, at.ROLE_PUSH_BUTTON, "Экспорт OBJ"))
+        click(expect(desktop, at.ROLE_PUSH_BUTTON, "Save"))
         output = work / "exports/model.obj"
         wait_for(lambda: output.is_file() and output.stat().st_size > 0, str(output), process)
         target = output.rename(output.with_name(name))
@@ -196,27 +204,27 @@ def exercise(binary, work, generate):
 
     try:
         desktop = at.Registry.getDesktop(0)
-        frame = expect(desktop, "frame", "Xtrifid")
-        expect(frame, "combo box", "1. Test bushing")
+        frame = expect(desktop, at.ROLE_FRAME, "Xtrifid")
+        expect(frame, at.ROLE_COMBO_BOX, "1. Test bushing")
         preview()
-        click(expect(frame, "toggle button", "Для рендера"))
-        popover = expect(frame, "list box", "")
-        click_menu_item(popover, expect(popover, "label", "Game Ready"))
-        expect(frame, "combo box", "Game Ready")
+        click(expect(frame, at.ROLE_TOGGLE_BUTTON, "Для рендера"))
+        popover = expect(frame, at.ROLE_LIST_BOX, "")
+        click_menu_item(popover, expect(popover, at.ROLE_LABEL, "Game Ready"))
+        expect(frame, at.ROLE_COMBO_BOX, "Game Ready")
         export("bushing.obj", [0.08, 0.08, 0.06], 128)
         if generate:
-            field = expect(frame, "text", "Описание новой модели")
+            field = expect(frame, at.ROLE_TEXT, "Описание новой модели")
             field.queryEditableText().setTextContents(PROMPT)
-            click(expect(frame, "push button", "Создать модель"))
+            click(expect(frame, at.ROLE_PUSH_BUTTON, "Создать модель"))
             expect(
                 frame,
-                "label",
+                at.ROLE_LABEL,
                 "Модель готова. Выберите деталь в окне просмотра или в списке.",
                 260,
             )
             preview()
             export("block.obj", [0.4, 0.2, 0.1], 12)
-        click(expect(frame, "push button", "Close"))
+        click(expect(frame, at.ROLE_PUSH_BUTTON, "Close"))
         assert process.wait(timeout=15) == 0
     finally:
         if process.poll() is None:
