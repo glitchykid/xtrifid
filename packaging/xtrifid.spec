@@ -8,6 +8,8 @@ a = Analysis(
         ("/usr/lib/x86_64-linux-gnu/libwayland-egl.so.1", "."),
         ("/usr/lib/x86_64-linux-gnu/libOpenGL.so.0", "."),
         ("/usr/lib/x86_64-linux-gnu/libGLESv2.so.2", "."),
+        # PyInstaller's Gtk hook sets GTK_PATH to the extraction root.
+        ("/usr/lib/x86_64-linux-gnu/gtk-4.0/4.0.0/immodules/libim-ibus.so", "immodules"),
     ],
     datas=[
         ("/opt/ollama/licenses/*", "ollama/licenses"),

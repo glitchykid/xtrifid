@@ -10,28 +10,40 @@ if ldconfig -p | grep -q 'libgtk-4'; then echo 'Unexpected system GTK' >&2; exit
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
 mkdir "$work/empty" "$work/home" "$work/runtime"
-export HOME="$work/home" TMPDIR="$work/runtime"
+export HOME="$work/home" TMPDIR="$work/runtime" GTK_IM_MODULE=ibus GTK_DEBUG=modules
 cd "$work/empty"
 "$binary" >"$work/log" 2>&1 &
 pid=$!
 server=
 cleanup() {
+    status=$?
     if [ -n "$server" ]; then
         kill "$server" 2>/dev/null || :
         wait "$server" 2>/dev/null || :
     fi
     kill "$pid" 2>/dev/null || :
     wait "$pid" 2>/dev/null || :
-    cat "$work/log" >&2
+    if [ "$status" -ne 0 ]; then cat "$work/log" >&2; fi
     rm -rf -- "$work"
 }
 trap cleanup EXIT
 tries=0
-until xdotool search --onlyvisible --name '^Xtrifid$' >/dev/null; do
+until window=$(xdotool search --onlyvisible --name '^Xtrifid$'); do
     kill -0 "$pid" && [ "$tries" -lt 400 ] || exit 1
     tries=$((tries + 1))
     sleep 0.1
 done
+xdotool windowfocus --sync "$window" mousemove --window "$window" 140 104 click 1
+xdotool type 'mesh preview'
+xdotool key ctrl+a ctrl+c
+tries=0
+until [ "$(timeout 2 xclip -selection clipboard -out 2>/dev/null)" = 'mesh preview' ]; do
+    [ "$tries" -lt 30 ] || { echo 'Model description did not accept input' >&2; exit 1; }
+    tries=$((tries + 1))
+    sleep 0.1
+done
+if grep -Fq 'No IM module matching GTK_IM_MODULE=ibus' "$work/log"; then exit 1; fi
+grep '^extension: ibus:' "$work/log"
 test -z "$(ls -A)"
 echo 'GTK window displayed from an empty directory without a system Python or GTK.'
 

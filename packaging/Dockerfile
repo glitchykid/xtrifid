@@ -12,7 +12,7 @@ RUN apt-get update -o APT::Update::Error-Mode=any && apt-get install -y --no-ins
               -e '/^Types: deb$/a Check-Valid-Until: no' /etc/apt/sources.list.d/ubuntu.sources \
     && rm -rf /var/lib/apt/lists/*
 RUN apt-get update -o APT::Update::Error-Mode=any && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        binutils ca-certificates gir1.2-gtk-4.0 libpython3.12 libgl1 \
+        binutils ca-certificates gir1.2-gtk-4.0 ibus-gtk4 libpython3.12 libgl1 \
         python3-gi python3-gi-cairo python3-numpy python3-opengl \
         python3-packaging python3-setuptools python3-venv \
     && rm -rf /var/lib/apt/lists/*
@@ -39,7 +39,7 @@ COPY --from=build /src/dist/xtrifid-linux-x86_64-notices.tar.gz /
 
 FROM ubuntu AS smoke
 RUN apt-get update -o APT::Update::Error-Mode=any && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        dbus-daemon fonts-dejavu-core libgl1-mesa-dri libglx-mesa0 libegl1 libegl-mesa0 xauth xdotool xvfb \
+        dbus-daemon fonts-dejavu-core libgl1-mesa-dri libglx-mesa0 libegl1 libegl-mesa0 xauth xclip xdotool xvfb \
     && install -d -m 1777 /tmp/.X11-unix && rm -rf /var/lib/apt/lists/*
 COPY packaging/smoke.sh /smoke.sh
 USER 1000:1000
