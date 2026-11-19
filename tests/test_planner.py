@@ -54,6 +54,13 @@ class PlannerTests(unittest.TestCase):
         self.assertIn("Шар", self.calls[1]["messages"][-1]["content"])
         self.assertEqual(scene.parts[0], Part.parse(spec()))
 
+    def test_decimal_echo_during_edit_keeps_existing_coordinate(self):
+        scene = Scene.parse({"parts": [spec() | {"center": [0, 0, 0.4 + 0.02]}]})
+        self.answer({"size": [2, 3, 8], "center": [0, 0, 0.42]})
+        updated = self.client.edit("Измени только высоту", scene, 0)
+        self.assertEqual(updated.center, scene.parts[0].center)
+        self.assertEqual(updated.size, (2, 3, 8))
+
     def test_planned_profiles_require_outline_in_decode_schema(self):
         self.answer(
             {

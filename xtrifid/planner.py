@@ -3,6 +3,8 @@
 import http.client
 import json
 import os
+from dataclasses import replace
+from math import ulp
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -131,7 +133,16 @@ Emit only the requested object. User request follows.\n""",
         def apply_patch(patch):
             if not isinstance(patch, dict) or not patch or not patch.keys() <= editable.keys():
                 raise ValueError("Return only the changed geometry fields of the selected part")
-            return Part.parse(scene.parts[index].data() | patch)
+            original = scene.parts[index]
+            updated = Part.parse(original.data() | patch)
+            # Model decimals can echo a computed coordinate one floating-point step away.
+            stable = {}
+            for field in ("size", "center", "rotation"):
+                stable[field] = tuple(
+                    a if abs(a - b) <= max(ulp(a), ulp(b)) else b
+                    for a, b in zip(getattr(original, field), getattr(updated, field))
+                )
+            return replace(updated, **stable)
 
         return self._plan(
             prompt,
