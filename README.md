@@ -2,7 +2,7 @@
 
 # Xtrifid
 
-Describe a 3D object, inspect the mesh in GTK and revise one part at a time. A local language model plans the assembly. A geometry engine builds the editable parts in metres. The interface is in Russian.
+Describe a prop or a person, inspect the 3D mesh in GTK and revise individual parts. Xtrifid builds static, editable geometry in metres. The interface is in Russian.
 
 ## Run the Linux executable
 
@@ -21,11 +21,11 @@ To open a saved project directly, pass its path as an argument. Each project ope
 ./xtrifid-linux-x86_64 "model.xtri"
 ```
 
-For text generation the studio first tries an existing local Ollama, including the running Xtrifid Docker service on Linux. Otherwise it starts its bundled CPU engine. When the first prompt finds no weights, click **Скачать модель** to download `qwen3.5:4b` (about 3.3 GB), then submit the prompt again. The built-in engine keeps weights in `~/.ollama/models` and reuses them offline. Set `OLLAMA_MODELS` for another weights directory, `OLLAMA_URL` to choose a server, or `XTRIFID_MODEL` to choose a model that supports structured output.
+For more complex descriptions and text edits, the studio first tries an existing local Ollama, including the running Xtrifid Docker service on Linux. Otherwise it starts its bundled CPU engine. When the first prompt finds no weights, click **Скачать модель** to download `qwen3.5:4b` (about 3.3 GB), then submit the prompt again. The built-in engine keeps weights in `~/.ollama/models` and reuses them offline. Set `OLLAMA_MODELS` for another weights directory, `OLLAMA_URL` to choose a server, or `XTRIFID_MODEL` to choose a model that supports structured output.
 
 ## Run from source with Docker
 
-Use Docker Engine with Compose, Git, `xauth` and a desktop with X11 or XWayland and OpenGL 3.3 (Mesa software rendering works). The first launch downloads the containers and around 3.3 GB of Qwen weights. Tested on a CPU system with 16 GB of RAM.
+Use Docker Engine with Compose, Git, `xauth` and a desktop with X11 or XWayland and OpenGL 3.3 (Mesa software rendering works). The first launch downloads the containers. Free-form generation also needs model weights (about 3.3 GB for Qwen). Tested on a CPU system with 16 GB of RAM.
 
 ```sh
 git clone https://github.com/glitchykid/xtrifid.git
@@ -33,13 +33,13 @@ cd xtrifid
 ./studio
 ```
 
-The launcher starts Ollama, downloads `qwen3.5:4b` once and opens the studio. Later sessions reuse the model volume. Prompts stay in the local Docker network. To select another installed or downloadable Ollama model that supports structured output, set `XTRIFID_MODEL` before running `./studio`. To stop the inference service, run `docker compose down`.
+The launcher starts Ollama and opens the studio. Use **Скачать модель** when the studio asks for weights. Later sessions reuse the model volume. Prompts stay in the local Docker network. To select another installed or downloadable Ollama model that supports structured output, set `XTRIFID_MODEL` before running `./studio`. To stop the inference service, run `docker compose down`.
 
 ## Build and refine a model
 
-1. Under **Описание модели**, try “Create a stool with a 40 × 40 cm seat, 4 cm thick, on four 40 cm legs.” Select a profile and press **Создать модель**.
+1. Enter `make a person with a cloak` under **Описание модели**. Choose **Game Ready** or **Для рендера**, then select **Низкая** (low), **Средняя** (medium) or **Высокая** (high) under **Детализация**. Press **Создать модель**.
 2. Drag to orbit and scroll to zoom. Click a visible part or select it under **Детали**. **Сетка** shows polygon boundaries. With the viewport focused, use the arrows to orbit, +/− to zoom and Home to fit.
-3. Enter a local change such as “Change only the seat thickness to 8 cm”, then press **Изменить деталь**. For an exact transform, enter XYZ dimensions, centre or rotation and press **Применить значения**. **Отменить действие** restores the previous state.
+3. Select **Плащ** to change the cloak’s dimensions, centre or rotation, then press **Применить значения**. For a text edit, describe the change and press **Изменить деталь**. **Отменить действие** restores the previous state.
 4. **Сохранить** writes an editable `.xtri` project. **Открыть** restores it. **Экспорт OBJ** writes the current mesh. The executable saves directly to the folder you choose. In Docker, choose `/exports` to keep the file in the host’s `./exports` directory.
 
 ## Edit a corner or rim
@@ -52,10 +52,18 @@ For a box or extrusion, the point controls a vertical edge in the local XY plane
 
 | Profile | Mesh |
 | --- | --- |
-| Game Ready | Triangles with consistent winding. Curved sections have 16 radial segments. A box uses 8 vertices and 12 triangles. |
-| Для рендера | Curved sections have 48 segments. The mesh preserves quad strips and flat box faces. Poles and complex end caps use triangles where needed. |
+| Game Ready | Consistently wound triangles. Round sections use 8, 16 or 32 segments at low, medium or high detail. A box uses 8 vertices and 12 triangles. |
+| Для рендера | Round sections use 24, 48 or 64 segments. Regular surfaces retain quad strips. Poles, rims and complex caps use triangles where needed. |
 
-The modeller builds up to 48 separately named solids using boxes, ellipsoids, cylinders, tubes with a measurable bore, cones, tori, extruded polygons and revolved profiles. A revolved wall profile can describe a hollow vessel. Parts can touch or intersect, and each keeps its own mesh. The current scope is static objects and hard-surface assemblies. Production character retopology, UVs, textures, materials and rigging are outside this version.
+The studio builds up to 48 named parts using primitives, extrusions, revolved profiles and anatomical sections. A person can stand, walk or extend their arms, with a short, knee-length or ankle-length cloak and an optional hood. The cloak opens at the front and has thickness. The body, limbs and clothing are independently selectable. Parts can intersect at joints. The figure is static and has no animation rig. OBJ contains geometry only.
+
+## Detail and available resources
+
+The exact prompt above works offline without model weights. For a more specific request, try “A broad-shouldered traveller, 192 cm tall, walking in an ankle-length cloak with the hood up.” Ollama interprets the description. You can change mesh detail afterwards. A version 1 project opens at medium detail.
+
+Open the editable example in Xtrifid to inspect the cloak and the two mesh profiles. [Cloaked figure project](https://github.com/glitchykid/xtrifid/releases/download/v0.4.0/cloaked-person.xtri) · [AI-generated 192 cm traveller](https://github.com/glitchykid/xtrifid/releases/download/v0.4.0/traveller-192.xtri)
+
+Before preview or export, Xtrifid estimates triangle count against available RAM and Linux container limits. It reserves memory for the desktop and caps each scene at 150,000 triangles after triangulation. If the requested level exceeds the current budget, the previous scene stays available. Choose a lower level or Game Ready. When opening a saved project, you can accept a level that fits. Inference is limited separately by model size, memory, CPU threads and context length. Other applications can still consume system resources.
 
 ## Troubleshooting
 

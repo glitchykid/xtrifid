@@ -2,17 +2,25 @@
 
 ## Decision
 
-Xtrifid targets static props assembled from identifiable parts. The language model emits a bounded JSON description containing named solids, dimensions, transforms and support relationships. The client validates each response and resolves the support graph against geometric bounds. A generated project stores the resulting transforms. Later edits can therefore move a single part independently. This design trades sculptural freedom for predictable dimensions, closed component meshes and stable part selection.
+Xtrifid builds static props and clothed human figures from identifiable parts. The language model describes solids and support relationships, or specifies a person's stature, build, pose, clothing and optional accessories. The client validates the description and resolves dimensions and placement. The project stores individual parts so a user can select and revise a cloak, a hand or a prop independently. The templates provide predictable dimensions and closed component meshes. They limit the range of anatomical shapes and poses.
 
 The allowed primitives include tubes with a dimensioned bore, extruded simple polygons and surfaces of revolution. Concave caps use ear clipping, curved walls use quad strips and poles use single vertices. Game Ready triangulates the final faces and uses a lower radial resolution. Render preserves quads on regular surfaces. Each object is independent. Assembly-wide Boolean union, intersection cleanup and deformation topology are outside the current scope.
 
 ## Data flow
 
-1. GTK sends a text request to a background worker. Ollama returns data constrained by a JSON schema. The planner limits input, output and wait time. It retries a malformed geometric description once.
+1. The user chooses a mesh profile and detail level. GTK submits text to a worker. A small whole-prompt grammar can generate common Russian and English figure requests offline. For free-form descriptions, Ollama first identifies the requested subject and, for figures, supplies an anatomical recipe and accessory list. This call has a 2,048-token context and a 192-token output budget. An object or accessory can then use a separate geometry request. Known primitive names go directly to the geometry request. The planner retries an invalid description once.
 2. The assembly resolver checks references and cycles, then places each supported part on the specified horizontal support plane. The geometry engine applies scaling followed by XYZ Euler rotation and translation.
 3. The document owns immutable part descriptions and up to 20 undo states. AI edits return a patch for one selected part. Numeric edits preserve untouched values, including precision beyond the displayed digits.
 4. The GTK OpenGL viewport and OBJ writer consume the same meshes. The viewport triangulates quads for display and uses the original polygon boundaries for its wire overlay. Display lighting stays in the viewport.
-5. The versioned JSON project restores editable geometry and mode. Temporary files and atomic replacement protect a saved file if writing fails.
+5. XTRI version 2 stores the parts, profile and detail. The version 1 reader assigns medium detail to reproduce the earlier radial resolution. Temporary files and atomic replacement protect a saved file if writing fails.
+
+## Decision on figures and resource limits
+
+A procedural builder joins anatomical cross-sections to form limbs and the torso. The head includes geometric facial landmarks. The garment meshes close the outer and inner cloth surfaces along the hem and openings. Keeping parts separate supports numeric and language edits and stable selection across tessellation levels. The trade-off is that adjacent parts can overlap and the figure requires additional work for animation.
+
+Game Ready uses 8, 16 or 32 radial segments, and Render uses 24, 48 or 64. Before constructing a preview or writing an OBJ, the engine sums conservative triangle bounds over all parts. It combines Linux `MemAvailable` with visible cgroup v2 memory limits and current usage. The host reserve is 20% of physical RAM, clamped to 1.5–4 GiB. The mesh budget allows 8 KiB of temporary working space per triangle after a further 256 MiB reserve, up to 150,000 triangles. If capacity cannot be measured reliably, allocation is refused. A replacement preview is prepared before changing the document and undo history. A saved project that exceeds the current budget can open at a lower level with the user's confirmation. [Linux cgroup v2](https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html) · [GTK alert choices](https://docs.gtk.org/gtk4/method.AlertDialog.choose.html) · [NumPy 1.26 array concatenation](https://numpy.org/doc/1.26/reference/generated/numpy.concatenate.html) · [NumPy 2.2 array concatenation](https://numpy.org/doc/2.2/reference/generated/numpy.concatenate.html)
+
+The inference client inspects installed weights and running models before submitting chat. It reserves space for the runner and context, reduces context and thread counts to fit, and admits one inference per studio process. The Docker launcher calculates a service ceiling of up to 6 GiB and four CPUs, disables service swap and permits one active model. In native mode the client monitors the bundled worker's process group. During generation the client checks available memory and can interrupt the request. Controls on external Ollama services depend on their administrator and resource measurements can change as other applications allocate memory. [Ollama v0.40.16 API types](https://github.com/ollama/ollama/blob/v0.40.16/api/types.go) · [List installed models](https://docs.ollama.com/api/tags) · [List running models](https://docs.ollama.com/api/ps) · [Docker Compose service limits](https://docs.docker.com/reference/compose-file/services/)
 
 ## Local profile edits
 
@@ -20,7 +28,7 @@ The profile editor shares the same cross section and rotation matrix used by the
 
 For a text edit, Ollama identifies the axes, the unit (mm, cm or m) and whether the requested coordinate is absolute or relative. The client converts units and computes the new coordinates. Axes omitted by the user retain their exact values.
 
-Edits use local metres. After a change, the geometry module validates the contour, recomputes its dimensions and rotates the shift of the bounding-box centre into world space. This keeps other control points anchored, including on rotated and elliptical parts. The first edit of a primitive uses the existing extrusion or lathe representation in the version 1 project format. A no-op preserves the original primitive. Self-intersections, inverted winding, invalid axis contact and out-of-range dimensions are rejected.
+Edits use local metres. After a change, the geometry module validates the contour, recomputes its dimensions and rotates the shift of the bounding-box centre into world space. This keeps other control points anchored, including on rotated and elliptical parts. The first edit of a primitive uses the extrusion or lathe representation introduced in XTRI version 1. A no-op preserves the original primitive. Self-intersections, inverted winding, invalid axis contact and out-of-range dimensions are rejected.
 
 ## Native Linux executable
 
@@ -44,7 +52,7 @@ With `qwen3.5:4b` already present in the project's Docker volume, run the packag
 sh tests/native_offline.sh exports/release/xtrifid-linux-x86_64
 ```
 
-The independent `tests/native_gui.py` driver also opens a version 1 project by filename, samples the actual X11 framebuffer, switches mesh profile and inspects OBJ topology. Its docstring lists the external driver's dependencies and `--generate` option.
+The independent `tests/native_gui.py` driver opens a version 1 project by filename, samples the actual X11 framebuffer, switches mesh profile, chooses low detail and generates a cloaked person. It inspects the exported OBJ topology and measures the figure's height. Its docstring lists the external driver's dependencies and `--generate` option.
 
 ## Docker runtime
 
@@ -72,6 +80,15 @@ docker compose run --rm --no-deps tests
 ```
 
 The deterministic suite checks manifold edges and winding, nonzero triangle areas, concave and hollow shapes, bounds, contact placement, undo, file round trips, error handling and GTK picking on a virtual display.
+
+The following commands exercise the complete GTK cloak workflow and a separate, memory-constrained desktop. The second session has two CPUs, a 660 MiB memory limit and no swap or network. It opens a low-detail render mesh and requests high detail, then verifies that the lower mesh is still usable and can be exported.
+
+```sh
+docker compose run --rm --no-deps -e PYTHONPATH=/app tests xvfb-run -a dbus-run-session -- python3 tests/live_character.py
+docker run --rm --init --network none --memory=660m --memory-swap=660m --cpus=2 -e LP_NUM_THREADS=2 -e OPENBLAS_NUM_THREADS=1 -e PYTHONPATH=/app xtrifid-tests xvfb-run -a dbus-run-session -- python3 tests/live_character.py --constrained
+```
+
+With the Qwen weights present, run `docker compose run --rm --no-deps -e PYTHONPATH=/app tests python3 tests/live_character_planner.py` to exercise free-form character and prop descriptions through the live model.
 
 Run `sh tests/external_x11.sh` after building both images to check desktop presentation. It starts Xvfb and the studio in separate containers with private IPC, samples the model's colour on the X server's framebuffer and checks for the Mesa attach error. The test uses its own X11 socket and cookie.
 
