@@ -28,11 +28,14 @@ Edits use local metres. After a change, the geometry module validates the contou
 | --- | --- |
 | Distribution | Debian 13 trixie, pinned base image |
 | GUI and preview | GTK 4.18.6, PyGObject and its Cairo integration 3.50.0, OpenGL 3.3 core, PyOpenGL 3.1.9 |
+| Mesa EGL, GLX and DRI | Debian trixie-backports 26.1.6-1~bpo13+1 on amd64 |
 | Geometry and storage | Python 3.13.5 and NumPy 2.2.4 |
 | Inference | Ollama 0.40.16, Qwen 3.5 4B (`d8b0f5e9760c` in the tested runtime) |
 | Checks | Ruff 0.17.6, unittest, Xvfb and Mesa |
 
-The Dockerfile pins the base and lint image digests. Compose pins the Ollama image digest. System libraries follow Debian stable updates. The launcher reuses a locally installed model tag. Verify `docker compose exec ollama ollama list` when comparing inference across machines.
+The Dockerfile pins the base and lint image digests. Compose pins the Ollama image digest. Most system libraries follow Debian stable updates. The launcher reuses a locally installed model tag. Verify `docker compose exec ollama ollama list` when comparing inference across machines.
+
+The X server and studio run in separate IPC namespaces. With Mesa 25.0.7 an X server advertising MIT-SHM could receive a reference to an unreachable shared-memory segment, leaving the visible window black even after a successful OpenGL draw. Mesa 26.1 checks that the segment can actually be attached and falls back to ordinary X11 image transfer. Only the Mesa packages and their matching dependencies come from the dated Debian Backports snapshot. APT verifies Debian's signatures and package checksums. The metadata expiry exception is scoped to that immutable archive. [Mesa 26.1 changes](https://docs.mesa3d.org/relnotes/26.1.0.html) · [Debian Snapshot](https://snapshot.debian.org/)
 
 API references for the target families and upstream versions are available in the official documentation. [GTK 4.18.6 source](https://gitlab.gnome.org/GNOME/gtk/-/tree/4.18.6/gtk) · [GtkGLArea](https://docs.gtk.org/gtk4/class.GLArea.html) · [OpenGL 3.3](https://registry.khronos.org/OpenGL/specs/gl/glspec33.core.pdf) · [NumPy 2.2](https://numpy.org/doc/2.2/) · [Python 3.13](https://docs.python.org/3.13/) · [Ollama 0.40.16](https://github.com/ollama/ollama/releases/tag/v0.40.16) · [Structured outputs](https://docs.ollama.com/capabilities/structured-outputs) · [Qwen model](https://ollama.com/library/qwen3.5:4b)
 
@@ -45,6 +48,8 @@ docker compose run --rm --no-deps tests
 ```
 
 The deterministic suite checks manifold edges and winding, nonzero triangle areas, concave and hollow shapes, bounds, contact placement, undo, file round trips, error handling and GTK picking on a virtual display.
+
+Run `sh tests/external_x11.sh` after building both images to check desktop presentation. It starts Xvfb and the studio in separate containers with private IPC, samples the model's colour on the X server's framebuffer and checks for the Mesa attach error. The test uses its own X11 socket and cookie.
 
 For an end-to-end CPU check, start Ollama and load the weights, then run the real GTK controls against the service. This test checks the dimensions and support contacts of a generated stool, sends a targeted edit, compares its four legs, and exports both profiles. Model responses depend on the selected weights.
 

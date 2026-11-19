@@ -40,6 +40,7 @@ cd xtrifid
 
 ## 문제 해결
 
+- **미리보기가 검게 나오거나 `MESA: error: Failed to attach to x11 shm` 오류가 표시될 때.** Git으로 설치했다면 `git pull --ff-only`로 업데이트한 뒤 `./studio`를 다시 실행하세요. 압축 파일로 설치했다면 0.2.1 이상을 사용하세요. 실행 스크립트가 이미지를 다시 빌드하면 새 Mesa 드라이버가 Docker의 공유 메모리가 격리된 상태에서도 화면을 표시합니다.
 - **창이 열리지 않을 때.** 그래픽 세션의 터미널에서 실행하고 `echo "$DISPLAY"`와 `xauth info`를 확인하세요. 스크립트가 현재 디스플레이의 인증 쿠키를 전달합니다.
 - **Ollama 오류가 발생하거나 첫 응답이 느릴 때.** `docker compose logs --tail 40 ollama`와 `docker compose exec ollama ollama list`를 확인하세요. CPU에서 모델을 처음 불러올 때 시간이 걸립니다. 요청이 실패해도 이전 장면은 유지됩니다.
 - **원하는 형상이 나오지 않을 때.** 수량, 단위, 접촉 위치를 명시하세요. 윤곽과 메시를 확인한 뒤 해당 부품을 골라 수정하세요.

@@ -40,6 +40,7 @@ The modeller builds up to 48 separately named solids using boxes, ellipsoids, cy
 
 ## Troubleshooting
 
+- **Black preview or `MESA: error: Failed to attach to x11 shm`.** In a Git checkout, run `git pull --ff-only` and restart `./studio`. For an archive installation, use version 0.2.1 or later. The launcher rebuilds the image with a Mesa driver that can display frames across the Docker IPC boundary.
 - **No window.** Launch from the graphical session and check `echo "$DISPLAY"` and `xauth info`. The launcher forwards the current display cookie.
 - **Ollama error or a slow first request.** Run `docker compose logs --tail 40 ollama` and `docker compose exec ollama ollama list`. A cold model takes time to load on CPU. The previous scene remains available after a failed request.
 - **Unexpected geometry.** Specify quantities, units and contact points. Inspect the silhouette and mesh, then correct the selected part.

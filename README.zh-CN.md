@@ -40,6 +40,7 @@ cd xtrifid
 
 ## 常见问题
 
+- **预览黑屏或出现 `MESA: error: Failed to attach to x11 shm`。** 如果通过 Git 安装，请运行 `git pull --ff-only`，然后重新运行 `./studio`。如果使用源码压缩包，请下载 0.2.1 或更新版本。启动脚本会重新构建镜像，更新后的 Mesa 驱动可以在 Docker 共享内存隔离的情况下显示画面。
 - **窗口无法打开。** 在图形会话的终端中运行，并检查 `echo "$DISPLAY"` 和 `xauth info`。启动脚本会向容器传递当前显示器的认证 cookie。
 - **Ollama 报错或首次响应较慢。** 运行 `docker compose logs --tail 40 ollama` 和 `docker compose exec ollama ollama list`。CPU 首次加载模型需要一些时间。请求失败后，原有场景会保留。
 - **形状与预期不符。** 明确数量、单位和接触位置。检查轮廓和网格后，选择需要修改的部件。

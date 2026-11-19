@@ -40,6 +40,7 @@ cd xtrifid
 
 ## 問題が起きたとき
 
+- **プレビューが黒い、または `MESA: error: Failed to attach to x11 shm` が表示される。** Git で取得した場合は `git pull --ff-only` を実行してから、もう一度 `./studio` を起動してください。アーカイブを使う場合は 0.2.1 以降を使用してください。起動時にイメージが再ビルドされ、Docker の共有メモリが分離された環境でも Mesa が画面を表示できます。
 - **ウィンドウが開かない。** デスクトップの端末から起動し、`echo "$DISPLAY"` と `xauth info` を確認してください。スクリプトは現在のディスプレイの認証 cookie を渡します。
 - **Ollama のエラー、初回の応答が遅い。** `docker compose logs --tail 40 ollama` と `docker compose exec ollama ollama list` を確認してください。CPU での初回読み込みには時間がかかります。失敗時も直前のシーンは保持されます。
 - **意図した形にならない。** 個数、単位、接する箇所を指定し、輪郭とメッシュを確認してから部品を選んで修正してください。
