@@ -22,7 +22,31 @@ For a text edit, Ollama identifies the axes, the unit (mm, cm or m) and whether 
 
 Edits use local metres. After a change, the geometry module validates the contour, recomputes its dimensions and rotates the shift of the bounding-box centre into world space. This keeps other control points anchored, including on rotated and elliptical parts. The first edit of a primitive uses the existing extrusion or lathe representation in the version 1 project format. A no-op preserves the original primitive. Self-intersections, inverted winding, invalid axis contact and out-of-range dimensions are rejected.
 
-## Runtime
+## Native Linux executable
+
+The release build uses a single x86-64 ELF so a desktop user can launch the studio or open a project without installing the development environment. The supported baseline is Ubuntu 24.04 or Linux Mint 22 with glibc 2.39, a graphical session and OpenGL 3.3. The executable bundles Python 3.12, GTK 4.14.5, NumPy 1.26.4 and PyOpenGL 3.1.7. Graphics drivers and the desktop's trusted CA certificates come from the operating system. PyInstaller extracts the runtime into a temporary directory at startup. Each file argument opens a project in its own window through GApplication. [PyInstaller 6.22.3](https://pyinstaller.org/en/v6.22.3/operating-mode.html) · [GApplication open signal](https://docs.gtk.org/gio/signal.Application.open.html)
+
+A configured `OLLAMA_URL` selects one server. With the default settings, the native client checks loopback, then the existing project's private Linux Docker bridge. It starts its bundled CPU Ollama and inference runner on loopback when neither service is available. It can change servers only before sending the chat request. An existing service owns its own model store. The embedded server uses `~/.ollama/models`, supports `OLLAMA_MODELS` and stops with the application. The user explicitly requests a download after a missing-model response. The UI streams progress and requires the server's final success message before offering to retry generation. [Ollama 0.40.16](https://github.com/ollama/ollama/releases/tag/v0.40.16) · [Ollama pull API](https://docs.ollama.com/api/pull)
+
+Build the binary in Docker and check it on an offline Ubuntu desktop fixture from the repository root.
+
+```sh
+sh packaging/build.sh
+docker build --platform linux/amd64 --target smoke -f packaging/Dockerfile -t xtrifid-native-smoke .
+docker run --rm --init --network none -v "$PWD/exports/release/xtrifid-linux-x86_64:/artifact/xtrifid-linux-x86_64:ro" xtrifid-native-smoke
+```
+
+The companion `xtrifid-linux-x86_64-notices.tar.gz` includes third-party notices and a package inventory. The Ubuntu toolchain uses a signed, dated archive, and the Python build dependencies use verified wheel hashes. Ollama comes from the same pinned image as the Compose deployment. [Ubuntu snapshot service](https://snapshot.ubuntu.com/)
+
+With `qwen3.5:4b` already present in the project's Docker volume, run the packaged GUI offline against the embedded CPU server. The test opens a private X11 session, enters a Russian prompt, exports the resulting block, measures its three dimensions and checks that the inference processes exit with the GUI. An optional second argument selects a different populated weights volume.
+
+```sh
+sh tests/native_offline.sh exports/release/xtrifid-linux-x86_64
+```
+
+The independent `tests/native_gui.py` driver also opens a version 1 project by filename, samples the actual X11 framebuffer, switches mesh profile and inspects OBJ topology. Its docstring lists the external driver's dependencies and `--generate` option.
+
+## Docker runtime
 
 | Component | Verified target |
 | --- | --- |
