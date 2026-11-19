@@ -9,7 +9,7 @@ from xtrifid.model import Part, Scene
 from xtrifid.planner import Planner, PlannerError
 
 
-class PlannerTests(unittest.TestCase):
+class PlannerHTTPCase(unittest.TestCase):
     def setUp(self):
         self.calls = []
         self.answers = []
@@ -39,6 +39,8 @@ class PlannerTests(unittest.TestCase):
     def answer(self, data):
         self.answers.append({"done": True, "message": {"content": json.dumps(data)}})
 
+
+class PlannerTests(PlannerHTTPCase):
     def test_schema_generation_and_targeted_edit(self):
         self.answer(
             {"parts": [spec() | {"support": 0}, spec("sphere") | dict(name="Шар", support=1)]}

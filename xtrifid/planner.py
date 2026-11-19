@@ -10,6 +10,7 @@ from urllib.request import Request, urlopen
 
 from .assembly import assemble
 from .model import MAX_LENGTH, MAX_OUTLINE, MAX_PARTS, MIN_SIZE, SHAPES, Part
+from .profile import move_profile_point, profile_points
 
 MAX_PROMPT = 2000
 RESPONSE_LIMIT = 524288
@@ -91,6 +92,56 @@ is the closed wall cross-section [radius, height], both in [0,1], before rotatio
 around Z.
 Omit outline for other shapes. No materials, ground plane or surrounding scenery."""
 
+POINT_INSTRUCTIONS = """Translate the user's request to an operation on each local profile axis.
+Return one JSON object with both named axes. For every unchanged axis return null.
+For an axis to change, return {"op":"set" or "add","value":signed number,"unit":"mm","cm" or "m"}.
+Copy the unit and quantity from the request. The application handles unit conversion.
+Use "set" for an absolute target coordinate, including negative targets. Use "add" for
+relative movement, with a negative value for decreasing coordinates. Right/left increase/
+decrease the first axis, and up/down increase/decrease the second axis.
+On a turned part, radius is measured from the centreline along local X; Z is local height."""
+
+UNITS_PER_METRE = {"m": 1, "cm": 100, "mm": 1000}
+POINT_OPERATIONS = ("set", "add")
+MAX_POINT_VALUE = 2 * MAX_LENGTH * max(UNITS_PER_METRE.values())
+AXIS_COMMAND = {
+    "oneOf": [
+        {"type": "null"},
+        {
+            "type": "object",
+            "properties": {
+                "op": {"type": "string", "enum": list(POINT_OPERATIONS)},
+                "value": {
+                    "type": "number",
+                    "minimum": -MAX_POINT_VALUE,
+                    "maximum": MAX_POINT_VALUE,
+                },
+                "unit": {"type": "string", "enum": list(UNITS_PER_METRE)},
+            },
+            "required": ["op", "value", "unit"],
+            "additionalProperties": False,
+        },
+    ]
+}
+
+
+def apply_axis_command(current, command):
+    if command is None:
+        return current
+    if not isinstance(command, dict) or command.keys() != {"op", "unit", "value"}:
+        raise ValueError("Expected an axis command with op, value and unit")
+    operation, unit, value = command["op"], command["unit"], command["value"]
+    if (
+        operation not in POINT_OPERATIONS
+        or not isinstance(unit, str)
+        or unit not in UNITS_PER_METRE
+    ):
+        raise ValueError("Use set or add, in mm, cm or m")
+    if type(value) not in (int, float) or not -MAX_POINT_VALUE <= value <= MAX_POINT_VALUE:
+        raise ValueError("Expected a finite coordinate or displacement in range")
+    metres = value / UNITS_PER_METRE[unit]
+    return current + metres if operation == "add" else metres
+
 
 class PlannerError(Exception):
     pass
@@ -153,11 +204,55 @@ Emit only the requested object. User request follows.\n""",
             apply_patch,
         )
 
-    def _plan(self, prompt, context, schema, parse):
-        if not prompt.strip() or len(prompt) > MAX_PROMPT:
+    def edit_point(self, prompt, scene, part_index, point_index):
+        if type(part_index) is not int or not 0 <= part_index < len(scene.parts):
+            raise ValueError("Выберите существующую деталь")
+        part = scene.parts[part_index]
+        points = profile_points(part)
+        if type(point_index) is not int or not 0 <= point_index < len(points):
+            raise ValueError("Выберите существующую точку профиля")
+        current = points[point_index]
+        axes = ("x", "y") if part.shape in ("box", "extrusion") else ("radius", "z")
+        context = json.dumps(
+            {
+                "part": part.name,
+                "shape": part.shape,
+                "axes": axes,
+                "profile_metres": points,
+                "selected_point_1_based": point_index + 1,
+                "selected_coordinates_metres": dict(zip(axes, current)),
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        schema = {
+            "type": "object",
+            "properties": dict.fromkeys(axes, AXIS_COMMAND),
+            "required": list(axes),
+            "additionalProperties": False,
+        }
+
+        def apply_commands(commands):
+            if not isinstance(commands, dict) or commands.keys() != set(axes):
+                raise ValueError(f"Expected exactly these axes: {', '.join(axes)}")
+            target = tuple(
+                apply_axis_command(coord, commands[axis]) for axis, coord in zip(axes, current)
+            )
+            return move_profile_point(part, point_index, target)
+
+        return self._plan(
+            prompt,
+            f"Profile: {context}\nUser request: ",
+            schema,
+            apply_commands,
+            instructions=POINT_INSTRUCTIONS,
+        )
+
+    def _plan(self, prompt, context, schema, parse, instructions=INSTRUCTIONS):
+        if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > MAX_PROMPT:
             raise ValueError(f"Введите описание от 1 до {MAX_PROMPT} символов")
         messages = [
-            {"role": "system", "content": INSTRUCTIONS},
+            {"role": "system", "content": instructions},
             {"role": "user", "content": context + prompt.strip()},
         ]
         for attempt in range(2):
