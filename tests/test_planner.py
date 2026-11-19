@@ -22,7 +22,11 @@ class PlannerHTTPCase(unittest.TestCase):
                     json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 )
                 answer = test.answers.pop(0)
-                self.send_response(200)
+                if answer is None:
+                    self.close_connection = True
+                    return
+                status, answer = answer if isinstance(answer, tuple) else (200, answer)
+                self.send_response(status)
                 self.end_headers()
                 self.wfile.write(json.dumps(answer).encode())
 

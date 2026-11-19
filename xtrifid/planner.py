@@ -1,19 +1,17 @@
 """Translate a natural-language request into bounded data using local Ollama."""
 
-import http.client
 import json
 import os
 from dataclasses import replace
 from math import ulp
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
 from .assembly import assemble
 from .model import MAX_LENGTH, MAX_OUTLINE, MAX_PARTS, MIN_SIZE, SHAPES, Part
+from .ollama import DEFAULT_URL, PlannerError, post_chat
+from .ollama import ModelMissing as ModelMissing
 from .profile import move_profile_point, profile_points
 
 MAX_PROMPT = 2000
-RESPONSE_LIMIT = 524288
 
 
 def numbers(length, low, high):
@@ -143,14 +141,19 @@ def apply_axis_command(current, command):
     return current + metres if operation == "add" else metres
 
 
-class PlannerError(Exception):
-    pass
-
-
 class Planner:
-    def __init__(self, url=None, model=None):
-        self.url = (url or os.getenv("OLLAMA_URL", "http://localhost:11434")).rstrip("/")
+    def __init__(self, url=None, model=None, local_server=None):
+        self.url = url or os.environ.get("OLLAMA_URL")
         self.model = model or os.getenv("XTRIFID_MODEL", "qwen3.5:4b")
+        self.local_server = local_server
+
+    @property
+    def url(self):
+        return self._configured_url or DEFAULT_URL
+
+    @url.setter
+    def url(self, value):
+        self._configured_url = value.rstrip("/") if value else None
 
     def generate(self, prompt):
         return self._plan(
@@ -278,16 +281,10 @@ Emit only the requested object. User request follows.\n""",
             "messages": messages,
             "options": {"temperature": 0, "num_ctx": 8192, "num_predict": 6000},
         }
-        request = Request(
-            self.url + "/api/chat",
-            data=json.dumps(payload).encode(),
-            headers={"Content-Type": "application/json"},
+        raw = post_chat(
+            self._configured_url, self.model, json.dumps(payload).encode(), self.local_server
         )
         try:
-            with urlopen(request, timeout=300) as response:
-                raw = response.read(RESPONSE_LIMIT + 1)
-            if len(raw) > RESPONSE_LIMIT:
-                raise PlannerError("Ответ Ollama слишком большой")
             data = json.loads(raw)
             if data.get("done") is not True or data.get("done_reason") == "length":
                 raise PlannerError("Ollama не завершила ответ. Попробуйте упростить описание.")
@@ -295,12 +292,5 @@ Emit only the requested object. User request follows.\n""",
             if not isinstance(content, str):
                 raise ValueError
             return content
-        except HTTPError as exc:
-            detail = f" Проверьте наличие модели {self.model}." if exc.code == 404 else ""
-            raise PlannerError(f"Ollama вернула HTTP {exc.code}.{detail}") from exc
-        except (URLError, TimeoutError, OSError, http.client.HTTPException) as exc:
-            raise PlannerError(
-                "Нет ответа от Ollama. Проверьте сервис и повторите запрос."
-            ) from exc
         except (KeyError, ValueError, TypeError, AttributeError, RecursionError) as exc:
             raise PlannerError("Неполный или неизвестный формат ответа Ollama") from exc
