@@ -1,10 +1,13 @@
 from dataclasses import asdict, dataclass, replace
 from math import isfinite
 
+from .organic import MAX_SECTIONS, ORGANIC_SHAPES
 from .polygon import normalize_outline, triangulate
 
-SHAPES = ("box", "cylinder", "sphere", "cone", "torus", "extrusion", "lathe", "tube")
+PRIMITIVES = ("box", "cylinder", "sphere", "cone", "torus", "extrusion", "lathe", "tube")
+SHAPES = PRIMITIVES + ORGANIC_SHAPES
 MODES = ("game", "render")
+DETAILS = ("low", "medium", "high")
 MAX_PARTS = 48
 MAX_OUTLINE = 32
 MAX_LENGTH = 1000
@@ -20,6 +23,25 @@ def vector(value, length, low, high):
     return tuple(float(n) for n in value)
 
 
+def loft_sections(raw):
+    if not isinstance(raw, (list, tuple)) or not 3 <= len(raw) <= MAX_SECTIONS:
+        raise ValueError(f"Нужно от 3 до {MAX_SECTIONS} поперечных сечений")
+    rows = tuple(vector(r, 5, -1, 1) for r in raw)
+    if (
+        rows[0][0] != 0
+        or rows[-1][0] != 1
+        or any(b[0] - a[0] < 1e-6 for a, b in zip(rows, rows[1:]))
+    ):
+        raise ValueError("Высоты сечений должны возрастать от 0 до 1")
+    for i, (_, rx, ry, _, _) in enumerate(rows):
+        if rx >= 1e-6 and ry >= 1e-6:
+            continue
+        if rx == ry == 0 and i in (0, len(rows) - 1):
+            continue
+        raise ValueError("Внутренним сечениям нужны два положительных радиуса")
+    return rows
+
+
 @dataclass(frozen=True)
 class Part:
     name: str
@@ -29,6 +51,8 @@ class Part:
     rotation: tuple
     outline: tuple = ()
     inner_diameter: float | None = None
+    sections: tuple = ()
+    cloak_back: bool = False
 
     @classmethod
     def parse(cls, data):
@@ -62,6 +86,9 @@ class Part:
                 triangulate(outline)
         size = vector(data.get("size"), 3, MIN_SIZE, MAX_LENGTH)
         bore = data.get("inner_diameter") if shape == "tube" else None
+        cloak_back = data.get("cloak_back", False) if shape == "cloak" else False
+        if type(cloak_back) is not bool:
+            raise ValueError("Неверное положение пол плаща")
         if shape == "tube" and (
             type(bore) not in (int, float) or not 0.000001 <= bore < size[0]
         ):
@@ -76,6 +103,8 @@ class Part:
             vector(data.get("rotation"), 3, -360, 360),
             outline,
             bore,
+            loft_sections(data.get("sections")) if shape == "loft" else (),
+            cloak_back,
         )
 
     def data(self):
@@ -84,22 +113,36 @@ class Part:
             del data["outline"]
         if self.inner_diameter is None:
             del data["inner_diameter"]
+        if not self.sections:
+            del data["sections"]
+        if not self.cloak_back:
+            del data["cloak_back"]
         return data
 
 
 @dataclass(frozen=True)
 class Scene:
     parts: tuple
+    detail: str = "medium"
+
+    def __post_init__(self):
+        if self.detail not in DETAILS:
+            raise ValueError("Неизвестный уровень детализации")
+
+    def with_part(self, index, part):
+        parts = list(self.parts)
+        parts[index] = part
+        return replace(self, parts=tuple(parts))
 
     @classmethod
     def parse(cls, data):
         raw = data.get("parts") if isinstance(data, dict) else None
         if not isinstance(raw, list) or not 1 <= len(raw) <= MAX_PARTS:
             raise ValueError(f"Ожидалось от 1 до {MAX_PARTS} деталей")
-        return cls(tuple(Part.parse(p) for p in raw))
+        return cls(tuple(Part.parse(p) for p in raw), data.get("detail", "medium"))
 
     def data(self):
-        return {"parts": [p.data() for p in self.parts]}
+        return {"parts": [p.data() for p in self.parts], "detail": self.detail}
 
 
 class Document:
@@ -116,9 +159,7 @@ class Document:
             self.scene, self.mode = scene, mode
 
     def replace(self, index, part):
-        parts = list(self.scene.parts)
-        parts[index] = part
-        self.apply(replace(self.scene, parts=tuple(parts)), self.mode)
+        self.apply(self.scene.with_part(index, part), self.mode)
 
     def undo(self):
         if self.history:

@@ -20,6 +20,7 @@ def main():
     app.register(None)
     window = Studio(app)
     window.present()
+    window.detail.set_selected(2)
     window.prompt.set_text(
         "Сделай табурет из пяти отдельных деталей: квадратное сиденье 40 на 40 см толщиной 4 см и четыре прямые ножки высотой 40 см по углам. Пол находится на Z=0."
     )

@@ -1,6 +1,6 @@
 """Edit a single control point in the part's pre-edit, centred local coordinate system."""
 
-from .geometry import RADIAL_SEGMENTS, build, ring_indices, rotation_matrix, unit_profile
+from .geometry import build, radial_segments, ring_indices, rotation_matrix, unit_profile
 from .model import MAX_LENGTH, MIN_SIZE, Part, vector
 
 PROFILE_SHAPES = ("box", "extrusion", "cylinder", "cone", "tube", "lathe")
@@ -18,14 +18,14 @@ def _check_index(index, points):
         raise ValueError("Выберите существующую точку профиля")
 
 
-def profile_guide(part, index, mode):
+def profile_guide(part, index, mode, detail="medium"):
     """World-space polyline on this mesh: a vertical edge, a closed ring, or a pole."""
     section = unit_profile(part)
     _check_index(index, section)
-    vertices = build(part, mode).vertices
+    vertices = build(part, mode, detail).vertices
     if part.shape in ("box", "extrusion"):
         return vertices[[index, index + len(section)]]
-    ring = ring_indices(section, RADIAL_SEGMENTS[mode])[index]
+    ring = ring_indices(section, radial_segments(mode, detail))[index]
     if len(ring) == 1:
         return vertices[ring.start : ring.stop]
     return vertices[[*ring, ring.start]]

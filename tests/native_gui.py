@@ -55,7 +55,7 @@ def lookup(container, role, name):
         raise
 
 
-def check_obj(path, expected_size, expected_faces):
+def check_obj(path, expected_size=None, expected_faces=None):
     vertices, faces = [], []
     for line in path.read_text().splitlines():
         fields = line.split()
@@ -63,17 +63,20 @@ def check_obj(path, expected_size, expected_faces):
             vertices.append(tuple(map(float, fields[1:])))
         if fields[:1] == ["f"]:
             faces.append(tuple(map(int, fields[1:])))
-    assert len(faces) == expected_faces, len(faces)
+    if expected_faces is not None:
+        assert len(faces) == expected_faces, len(faces)
     assert {len(f) for f in faces} == {3}
     assert all(1 <= i <= len(vertices) for f in faces for i in f)
     edges = Counter((a, b) for f in faces for a, b in zip(f, (*f[1:], f[0])))
     assert all(a != b and n == 1 and edges[b, a] == 1 for (a, b), n in edges.items())
     size = [round(max(axis) - min(axis), 5) for axis in zip(*vertices)]
-    assert size == expected_size, size
+    if expected_size is not None:
+        assert size == expected_size, size
     print(
         f"OBJ {path.name}: {len(vertices)} vertices, {len(faces)} triangles, {size} m",
         flush=True,
     )
+    return size
 
 
 def stage_session(binary, generate):
@@ -194,13 +197,12 @@ def exercise(binary, work, generate):
         count = wait_for(lambda: c if (c := mint_pixels()) > 1500 else 0, "3D preview", process)
         print(f"Preview: {count} mesh-coloured pixels in the viewport", flush=True)
 
-    def export(name, size, faces):
+    def export(name):
         click(expect(frame, at.ROLE_PUSH_BUTTON, "Экспорт OBJ"))
         click(expect(desktop, at.ROLE_PUSH_BUTTON, "Save"))
         output = work / "exports/model.obj"
         wait_for(lambda: output.is_file() and output.stat().st_size > 0, str(output), process)
-        target = output.rename(output.with_name(name))
-        check_obj(target, size, faces)
+        return output.rename(output.with_name(name))
 
     try:
         desktop = at.Registry.getDesktop(0)
@@ -211,9 +213,23 @@ def exercise(binary, work, generate):
         popover = expect(frame, at.ROLE_LIST_BOX, "")
         click_menu_item(popover, expect(popover, at.ROLE_LABEL, "Game Ready"))
         expect(frame, at.ROLE_COMBO_BOX, "Game Ready")
-        export("bushing.obj", [0.08, 0.08, 0.06], 128)
+        check_obj(export("bushing.obj"), [0.08, 0.08, 0.06], 128)
+        click(expect(frame, at.ROLE_TOGGLE_BUTTON, "Средняя"))
+        popover = expect(frame, at.ROLE_LIST_BOX, "")
+        click_menu_item(popover, expect(popover, at.ROLE_LABEL, "Низкая"))
+        expect(frame, at.ROLE_COMBO_BOX, "Низкая")
+        field = expect(frame, at.ROLE_TEXT, "Описание новой модели")
+        field.queryEditableText().setTextContents("сделай человека с плащом")
+        click(expect(frame, at.ROLE_PUSH_BUTTON, "Создать модель"))
+        expect(frame, at.ROLE_COMBO_BOX, "1. Туловище")
+        preview()
+        figure = export("character.obj")
+        size = check_obj(figure)
+        assert size[2] == 1.75 and any(
+            line.startswith("o ") and line.endswith("_Плащ")
+            for line in figure.read_text().splitlines()
+        )
         if generate:
-            field = expect(frame, at.ROLE_TEXT, "Описание новой модели")
             field.queryEditableText().setTextContents(PROMPT)
             click(expect(frame, at.ROLE_PUSH_BUTTON, "Создать модель"))
             expect(
@@ -223,7 +239,7 @@ def exercise(binary, work, generate):
                 260,
             )
             preview()
-            export("block.obj", [0.4, 0.2, 0.1], 12)
+            check_obj(export("block.obj"), [0.4, 0.2, 0.1], 12)
         click(expect(frame, at.ROLE_PUSH_BUTTON, "Close"))
         assert process.wait(timeout=15) == 0
     finally:

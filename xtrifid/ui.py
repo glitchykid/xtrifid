@@ -1,12 +1,13 @@
 import os
 import threading
+from dataclasses import replace
 from pathlib import Path
 
 from xtrifid.gtk import Gio, GLib, Gtk, Pango
 
-from .geometry import build
+from .geometry import MeshBudgetError, build, check_scene_budget
 from .local_server import pull_model
-from .model import MAX_LENGTH, MIN_SIZE, MODES, Document, Part
+from .model import DETAILS, MAX_LENGTH, MIN_SIZE, MODES, Document, Part
 from .planner import MAX_PROMPT, ModelMissing, Planner, PlannerError
 from .profile import PROFILE_SHAPES, profile_guide
 from .profile_editor import ProfileEditor
@@ -48,6 +49,8 @@ headerbar {background:#20252f;color:#e7eaf0;}
 .status {background:#191e27;padding:7px 12px;}
 .empty {background:#1e242e;color:#d8e0ec;border-radius:10px;padding:12px 16px;}
 """
+
+DETAIL_LABELS = ("Низкая", "Средняя", "Высокая")
 
 
 class Studio(Gtk.ApplicationWindow):
@@ -95,15 +98,24 @@ class Studio(Gtk.ApplicationWindow):
         side.add_css_class("side")
         scroll.set_child(side)
         side.append(label("Описание модели", "section"))
-        self.prompt = Gtk.Entry(placeholder_text="Например, табурет с четырьмя ножками")
+        self.prompt = Gtk.Entry(placeholder_text="Например, сделай человека с плащом")
         self.prompt.set_max_length(MAX_PROMPT)
         accessible(self.prompt, "Описание новой модели")
         self.prompt.connect("activate", lambda *_: self.request(False))
         side.append(self.prompt)
         self.mode = Gtk.DropDown.new_from_strings(["Game Ready", "Для рендера"])
         accessible(self.mode, "Профиль геометрии")
-        self.mode.connect("notify::selected", self.change_mode)
-        side.append(self.mode)
+        self.detail = Gtk.DropDown.new_from_strings(["Выберите…", *DETAIL_LABELS])
+        accessible(self.detail, "Детализация модели")
+        settings = Gtk.Grid(column_spacing=8, row_spacing=3)
+        for column, (title, selector) in enumerate(
+            (("Профиль сетки", self.mode), ("Детализация", self.detail))
+        ):
+            settings.attach(label(title, "muted"), column, 0, 1, 1)
+            selector.set_hexpand(True)
+            settings.attach(selector, column, 1, 1, 1)
+            selector.connect("notify::selected", self.change_settings)
+        side.append(settings)
         self.generate = button("Создать модель", lambda: self.request(False), "primary")
         side.append(self.generate)
         side.append(Gtk.Separator())
@@ -180,7 +192,7 @@ class Studio(Gtk.ApplicationWindow):
         pane.append(overlay)
         self.view = Viewport(self.select, self.notify_status)
         overlay.set_child(self.view)
-        self.empty = label("Введите описание и нажмите «Создать модель».", "empty")
+        self.empty = label("Введите описание и выберите детализацию.", "empty")
         self.empty.set_halign(Gtk.Align.CENTER)
         self.empty.set_valign(Gtk.Align.CENTER)
         self.empty.set_can_target(False)
@@ -196,7 +208,7 @@ class Studio(Gtk.ApplicationWindow):
         self.download = button("Скачать модель", self.download_weights)
         bottom.append(self.download)
         root.append(bottom)
-        self.refresh()
+        self.present_scene(None, self.doc.mode)
         self.notify_status(f"Локальная модель · {self.planner.model}")
 
     def closing(self, *_):
@@ -211,34 +223,49 @@ class Studio(Gtk.ApplicationWindow):
         scene = self.doc.scene is not None
         self.download.set_visible(self.missing_model is not None)
         self.download.set_sensitive(not self.busy)
-        for w in (self.generate, self.prompt, self.opener, self.mode):
+        for w in (self.prompt, self.opener, self.mode, self.detail):
             w.set_sensitive(not self.busy)
+        self.generate.set_sensitive(not self.busy and self.detail.get_selected() > 0)
         for w in (self.saver, self.exporter, self.inspector, self.part_list):
             w.set_sensitive(scene and not self.busy)
         self.back.set_sensitive(bool(self.doc.history) and not self.busy)
         self.spinner.set_visible(self.busy)
         self.spinner.set_spinning(self.busy)
 
-    def refresh(self, *, reset_point=False):
-        self.syncing = True
-        scene = self.doc.scene
+    def present_scene(self, scene, mode, *, reset_point=False, undo=False):
         parts = scene.parts if scene else ()
+        if scene:
+            check_scene_budget(scene, mode)
+        try:
+            meshes = [build(p, mode, scene.detail) for p in parts]
+            self.view.set_meshes(meshes)
+        except MemoryError as exc:
+            raise MeshBudgetError("Недостаточно памяти для предпросмотра.") from exc
+        if undo:
+            self.doc.undo()
+        else:
+            self.doc.apply(scene, mode)
+        self.syncing = True
+        if reset_point:
+            self.selected = 0
         self.selected = min(self.selected, max(0, len(parts) - 1))
-        self.mode.set_selected(MODES.index(self.doc.mode))
+        self.mode.set_selected(MODES.index(mode))
+        if scene:
+            self.detail.set_selected(DETAILS.index(scene.detail) + 1)
         self.part_list.set_model(
             Gtk.StringList.new([f"{i + 1}. {p.name}" for i, p in enumerate(parts)])
         )
-        meshes = [build(p, self.doc.mode) for p in parts]
-        self.view.set_meshes(meshes)
         if parts:
             self.select(self.selected, reset_point=reset_point)
         else:
             self.point_editor.set_part(None)
             self.profile_section.set_visible(False)
             self.view.set_guide()
+        faces = sum(len(mesh.faces) for mesh in meshes)
+        tris = sum(len(face) == 3 for mesh in meshes for face in mesh.faces)
         self.stats.set_text(
-            f"Деталей: {len(parts)}   ·   Граней: {sum(len(m.faces) for m in meshes):,}".replace(
-                ",", " "
+            f"Деталей {len(parts)}   ·   Треуг. {tris:_}   ·   Четырёхуг. {faces - tris:_}".replace(
+                "_", " "
             )
         )
         self.empty.set_visible(not parts)
@@ -269,7 +296,10 @@ class Studio(Gtk.ApplicationWindow):
         if self.profile_section.get_expanded() and self.point_editor.part:
             self.view.set_guide(
                 profile_guide(
-                    self.point_editor.part, self.point_editor.selected_index, self.doc.mode
+                    self.point_editor.part,
+                    self.point_editor.selected_index,
+                    self.doc.mode,
+                    self.doc.scene.detail,
                 )
             )
         else:
@@ -280,15 +310,35 @@ class Studio(Gtk.ApplicationWindow):
             self.select(widget.get_selected())
 
     def install(self, scene, mode):
-        self.doc.apply(scene, mode)
-        self.selected = 0
-        self.refresh(reset_point=True)
+        self.present_scene(scene, mode, reset_point=True)
         self.view.reset_camera()
 
-    def change_mode(self, widget, _):
-        if not self.syncing and not self.busy:
-            self.doc.apply(self.doc.scene, MODES[widget.get_selected()])
-            self.refresh()
+    def change_settings(self, widget, _):
+        if self.syncing or self.busy:
+            return
+        scene = self.doc.scene
+        mode = MODES[self.mode.get_selected()]
+        index = self.detail.get_selected()
+        if scene is None:
+            self.doc.apply(None, mode)
+            self.controls()
+            return
+        if index and mode == self.doc.mode and DETAILS[index - 1] == scene.detail:
+            return
+        try:
+            if not index:
+                raise ValueError("Выберите детализацию модели.")
+            self.present_scene(replace(scene, detail=DETAILS[index - 1]), mode)
+        except ValueError as exc:
+            self.syncing = True
+            self.mode.set_selected(MODES.index(self.doc.mode))
+            self.detail.set_selected(DETAILS.index(scene.detail) + 1)
+            self.syncing = False
+            self.notify_status(str(exc))
+        else:
+            self.notify_status(
+                f"{self.mode.get_selected_item().get_string()} · {DETAIL_LABELS[index - 1]} детализация"
+            )
 
     def toggle_wire(self, widget):
         self.view.wire = widget.get_active()
@@ -312,23 +362,33 @@ class Studio(Gtk.ApplicationWindow):
             values["inner_diameter"] = self.bore.get_value()
         try:
             updated_part = Part.parse(values)
+            self.replace_part(updated_part)
         except ValueError as exc:
             self.notify_status(str(exc))
             return
-        self.doc.replace(self.selected, updated_part)
-        self.refresh()
         self.notify_status(f"Размеры и положение применены · {part.name}")
 
     def undo(self):
-        self.doc.undo()
-        self.refresh()
+        if not self.doc.history:
+            return
+        try:
+            self.present_scene(*self.doc.history[-1], undo=True)
+        except ValueError as exc:
+            self.notify_status(str(exc))
+            return
         self.notify_status("Действие отменено")
+
+    def replace_part(self, part):
+        self.present_scene(self.doc.scene.with_part(self.selected, part), self.doc.mode)
 
     def apply_point(self, part):
         if self.busy or not self.doc.scene:
             return
-        self.doc.replace(self.selected, part)
-        self.refresh()
+        try:
+            self.replace_part(part)
+        except ValueError as exc:
+            self.notify_status(str(exc))
+            return
         self.notify_status(f"Точка {self.point_editor.selected_index + 1} · {part.name}")
 
     def request_point(self, point_index, prompt):
@@ -345,12 +405,14 @@ class Studio(Gtk.ApplicationWindow):
     def request(self, edit):
         if edit and not self.doc.scene:
             return
+        if not self.detail.get_selected():
+            self.notify_status("Выберите детализацию модели.")
+            return
         if edit:
             scene, index = self.doc.scene, self.selected
 
             def apply(part):
-                self.doc.replace(index, part)
-                self.refresh()
+                self.present_scene(scene.with_part(index, part), self.doc.mode)
                 self.notify_status(f"Деталь изменена · {part.name}")
 
             self.run_planner(
@@ -367,19 +429,26 @@ class Studio(Gtk.ApplicationWindow):
                     "Модель готова. Выберите деталь в окне просмотра или в списке."
                 )
 
+            detail = DETAILS[self.detail.get_selected() - 1]
             self.run_planner(
                 self.prompt.get_text(),
-                self.planner.generate,
+                lambda text: self.planner.generate(text, detail=detail),
                 install,
-                "Ollama строит модель по описанию…",
+                "Построение модели по описанию…",
+                new_scene=True,
             )
 
-    def run_planner(self, prompt, compute, apply, progress):
+    def run_planner(self, prompt, compute, apply, progress, *, new_scene=False):
         if self.busy:
             return
         prompt = prompt.strip()
         if not prompt:
             self.notify_status("Введите текст запроса")
+            return
+        try:
+            check_scene_budget(None if new_scene else self.doc.scene, self.doc.mode)
+        except ValueError as exc:
+            self.notify_status(str(exc))
             return
         self.missing_model = None
         self.run_task(lambda: compute(prompt), apply, progress)
@@ -403,7 +472,12 @@ class Studio(Gtk.ApplicationWindow):
 
         self.run_task(
             lambda: pull_model(
-                missing.url, missing.model, report, self.cancel_download, opener=missing.opener
+                missing.url,
+                missing.model,
+                report,
+                self.cancel_download,
+                opener=missing.opener,
+                memory_limit=missing.memory_limit,
             ),
             complete,
             f"Загрузка {missing.model}…",
@@ -428,13 +502,18 @@ class Studio(Gtk.ApplicationWindow):
             elif self.doc.scene is not scene:
                 self.notify_status("Во время запроса сцена изменилась. Повторите правку.")
             else:
-                apply(value)
+                try:
+                    apply(value)
+                except ValueError as exc:
+                    self.notify_status(str(exc))
             self.controls()
             return False
 
         def work():
             try:
                 value = compute()
+            except MemoryError:
+                GLib.idle_add(finish, None, MeshBudgetError("Недостаточно памяти для запроса."))
             except (PlannerError, ValueError) as exc:
                 GLib.idle_add(finish, None, exc)
             else:
@@ -447,12 +526,48 @@ class Studio(Gtk.ApplicationWindow):
         try:
             if not path:
                 raise ValueError("Выберите локальный файл")
-            self.install(*load_project(path))
+            scene, mode = load_project(path)
+            try:
+                self.install(scene, mode)
+            except MeshBudgetError as exc:
+                for detail in reversed(DETAILS[: DETAILS.index(scene.detail)]):
+                    candidate = replace(scene, detail=detail)
+                    try:
+                        check_scene_budget(candidate, mode)
+                    except MeshBudgetError:
+                        continue
+                    self.offer_lower_detail(path, candidate, mode, str(exc))
+                    return
+                raise
         except (OSError, ValueError, RecursionError) as exc:
             self.notify_status(f"Ошибка файла · {exc}")
             return
         self.file_folder = str(Path(path).parent)
         self.notify_status(f"Файл открыт · {path}")
+
+    def offer_lower_detail(self, path, candidate, mode, reason):
+        level = DETAIL_LABELS[DETAILS.index(candidate.detail)]
+        dialog = Gtk.AlertDialog(
+            message=f"Открыть проект с детализацией «{level}»?",
+            detail=reason,
+            buttons=["Отмена", "Открыть"],
+            cancel_button=0,
+            default_button=1,
+        )
+        self.notify_status(reason)
+
+        def chosen(sender, result):
+            try:
+                if sender.choose_finish(result) != 1 or self.closed:
+                    return
+                self.install(candidate, mode)
+            except (GLib.Error, ValueError) as exc:
+                self.notify_status(str(exc))
+                return
+            self.file_folder = str(Path(path).parent)
+            self.notify_status(f"Файл открыт · {level} детализация · {path}")
+
+        dialog.choose(self, None, chosen)
 
     def file_dialog(self, action):
         opening = action == "open"

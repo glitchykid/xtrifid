@@ -6,10 +6,60 @@ from math import cos, pi, radians, sin, tau
 
 import numpy as np
 
-from .model import MODES
+from .model import DETAILS, MODES
+from .organic import organic_mesh, organic_triangle_bound
 from .polygon import triangulate, turn
+from .resources import mesh_triangle_budget
+from .rings import bridge
 
-RADIAL_SEGMENTS = {"game": 16, "render": 48}
+_SEGMENTS = {"game": (8, 16, 32), "render": (24, 48, 64)}
+
+
+def radial_segments(mode, detail="medium"):
+    if mode not in MODES or detail not in DETAILS:
+        raise ValueError("Неизвестный профиль или уровень детализации")
+    return _SEGMENTS[mode][DETAILS.index(detail)]
+
+
+def triangle_bound(part, mode, detail):
+    """Estimate the triangulated working set without allocating the mesh."""
+    n = radial_segments(mode, detail)
+    if part.shape == "box":
+        return 12
+    if part.shape == "extrusion":
+        return 4 * len(part.outline) - 4
+    if part.shape == "sphere":
+        return n * (n - 2)
+    if part.shape == "torus":
+        return n * n
+    if part.shape == "tube":
+        return 8 * n
+    if part.shape == "cylinder":
+        return 4 * n
+    if part.shape == "cone":
+        return 2 * n
+    if part.shape == "lathe":
+        return 2 * n * sum(r > 0 for r, _ in part.outline)
+    return organic_triangle_bound(part, n)
+
+
+class MeshBudgetError(ValueError):
+    pass
+
+
+def check_scene_budget(scene, mode):
+    budget = mesh_triangle_budget()
+    if budget <= 0:
+        raise MeshBudgetError("Недостаточно свободной памяти для построения сетки.")
+    if scene is not None:
+        needed = sum(triangle_bound(p, mode, scene.detail) for p in scene.parts)
+        if needed > budget:
+            raise MeshBudgetError(
+                f"Для сетки требуется до {needed:_} треугольников, текущий лимит {budget:_}. "
+                "Снизьте детализацию, выберите Game Ready или освободите память.".replace(
+                    "_", " "
+                )
+            )
 
 
 @dataclass(frozen=True)
@@ -23,19 +73,6 @@ def triangles(faces):
     for face in faces:
         for i in range(1, len(face) - 1):
             yield (face[0], face[i], face[i + 1])
-
-
-def bridge(lower, upper):
-    """Connect two rings or terminate one at a single pole."""
-    n = max(len(lower), len(upper))
-    for i in range(n):
-        j = (i + 1) % n
-        if len(lower) == 1:
-            yield (lower[0], upper[j], upper[i])
-        elif len(upper) == 1:
-            yield (lower[i], lower[j], upper[0])
-        else:
-            yield (lower[i], lower[j], upper[j], upper[i])
 
 
 def unit_profile(part):
@@ -69,23 +106,26 @@ def ring_indices(profile, segments):
     return rings
 
 
-def radial(part, n):
-    vertices, faces, smooth = [], [], []
+def radial_profile(part, n):
     if part.shape == "sphere":
         steps = n // 2
-        profile = (
+        return (
             [(0, -0.5)]
             + [(0.5 * sin(pi * i / steps), -0.5 * cos(pi * i / steps)) for i in range(1, steps)]
             + [(0, 0.5)]
         )
-    elif part.shape == "torus":
+    if part.shape == "torus":
         steps = n // 2
-        profile = [
+        return [
             (0.34 + 0.16 * cos(tau * i / steps), 0.5 * sin(tau * i / steps))
             for i in range(steps)
         ]
-    else:
-        profile = unit_profile(part)
+    return unit_profile(part)
+
+
+def radial(part, n):
+    vertices, faces, smooth = [], [], []
+    profile = radial_profile(part, n)
     rings = ring_indices(profile, n)
     for (radius, z), ring in zip(profile, rings):
         count = len(ring)
@@ -130,14 +170,32 @@ def rotation_matrix(rotation):
     return np.asarray(rz) @ ry @ rx
 
 
-@lru_cache(maxsize=144)
-def build(part, mode):
-    if mode not in MODES:
-        raise ValueError("Неизвестный профиль сетки")
+def height_bounds(part, detail):
+    """Evaluate only vertical extrema for support placement, without tessellating a scene."""
+    axis = rotation_matrix(part.rotation)[2] * part.size
+    if part.shape in ("box", "extrusion"):
+        projected = unit_profile(part) @ axis[:2]
+        half = abs(axis[2]) / 2
+        lo, hi = projected.min() - half, projected.max() + half
+    else:
+        n = radial_segments("render", detail)
+        angles = np.arange(n) * (tau / n)
+        xy = axis[0] * np.cos(angles) + axis[1] * np.sin(angles)
+        radius, z = np.asarray(radial_profile(part, n)).T
+        lo = (radius * xy.min() + z * axis[2]).min()
+        hi = (radius * xy.max() + z * axis[2]).max()
+    return float(lo + part.center[2]), float(hi + part.center[2])
+
+
+@lru_cache(maxsize=48)
+def build(part, mode, detail="medium"):
+    segments = radial_segments(mode, detail)
     if part.shape in ("box", "extrusion"):
         vertices, faces, smooth = prism(part)
+    elif part.shape in ("sphere", "torus", "tube", "lathe", "cone", "cylinder"):
+        vertices, faces, smooth = radial(part, segments)
     else:
-        vertices, faces, smooth = radial(part, RADIAL_SEGMENTS[mode])
+        vertices, faces, smooth = organic_mesh(part, segments)
     if mode == "game":
         smooth = [s for face, s in zip(faces, smooth) for _ in range(len(face) - 2)]
         faces = list(triangles(faces))

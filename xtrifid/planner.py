@@ -2,16 +2,19 @@
 
 import json
 import os
+import re
 from dataclasses import replace
 from math import ulp
 
 from .assembly import assemble
-from .model import MAX_LENGTH, MAX_OUTLINE, MAX_PARTS, MIN_SIZE, SHAPES, Part
+from .character import CHARACTER_SCHEMA, build_character
+from .model import DETAILS, MAX_LENGTH, MAX_OUTLINE, MAX_PARTS, MIN_SIZE, PRIMITIVES, Part
 from .ollama import DEFAULT_URL, PlannerError, post_chat
 from .ollama import ModelMissing as ModelMissing
 from .profile import move_profile_point, profile_points
 
 MAX_PROMPT = 2000
+MAX_ACCESSORY_DESCRIPTION = 160
 
 
 def numbers(length, low, high):
@@ -28,7 +31,7 @@ PART = {
     "additionalProperties": False,
     "properties": {
         "name": {"type": "string", "minLength": 1, "maxLength": 80},
-        "shape": {"type": "string", "enum": list(SHAPES)},
+        "shape": {"type": "string", "enum": list(PRIMITIVES)},
         "size": numbers(3, MIN_SIZE, MAX_LENGTH),
         "center": numbers(3, -MAX_LENGTH, MAX_LENGTH),
         "rotation": numbers(3, -360, 360),
@@ -60,19 +63,52 @@ def placed_schema(shapes, extra=()):
 PROFILE_SHAPES = ("extrusion", "lathe")
 PLACED_PART = {
     "oneOf": [
-        placed_schema([s for s in SHAPES if s not in (*PROFILE_SHAPES, "tube")]),
+        placed_schema([s for s in PRIMITIVES if s not in (*PROFILE_SHAPES, "tube")]),
         placed_schema(list(PROFILE_SHAPES), ("outline",)),
         placed_schema(["tube"], ("inner_diameter",)),
     ]
 }
-SCENE = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["parts"],
-    "properties": {
-        "parts": {"type": "array", "minItems": 1, "maxItems": MAX_PARTS, "items": PLACED_PART}
-    },
+SUBJECT = {
+    "oneOf": [
+        {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["subject", "accessories", "character"],
+            "properties": {
+                "subject": {"type": "string", "enum": ["character"]},
+                "accessories": {
+                    "type": "array",
+                    "maxItems": MAX_PARTS,
+                    "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": MAX_ACCESSORY_DESCRIPTION,
+                    },
+                },
+                "character": CHARACTER_SCHEMA,
+            },
+        },
+        {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["subject"],
+            "properties": {"subject": {"type": "string", "enum": ["object"]}},
+        },
+    ]
 }
+
+
+def parts_schema(limit):
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["parts"],
+        "properties": {
+            "parts": {"type": "array", "minItems": 1, "maxItems": limit, "items": PLACED_PART}
+        },
+    }
+
+
 INSTRUCTIONS = """You are a precision 3D modeller. Output only JSON following the schema.
 Use metres, Z up, X width, Y depth. size = full local bounding dimensions [X,Y,Z].
 center = world centre of the part. rotation = degrees about X, then Y, then Z.
@@ -89,6 +125,99 @@ For a vase, bottle or other turned solid, use lathe. Its outline
 is the closed wall cross-section [radius, height], both in [0,1], before rotation
 around Z.
 Omit outline for other shapes. No materials, ground plane or surrounding scenery."""
+
+SUBJECT_INSTRUCTIONS = """Identify what the user's text asks to model. Return a single JSON object.
+For a human, traveller, actor or other human figure, set subject to character.
+List each additional item the figure holds, carries or wears in accessories. Preserve
+sizes and attachment sites using the user's words. For example, a person carrying a bag
+on one shoulder has accessories ["сумка через плечо"]. Ordinary anatomy, the cloak and
+its hood are included in character. When no extra object was requested, use []. Specify full
+height in metres, build (slim/average/broad), pose (standing/walking/arms_out),
+cloak length (none/short/knee/ankle), and whether its hood is raised (true/false).
+Defaults are 1.75 m, average build, standing upright, no cloak and no hood.
+A cloak of unspecified length reaches the knees. Convert centimetres to metres.
+Example for a slim 165 cm tall human with outstretched arms, a short hoodless cape:
+{"subject":"character","accessories":[],"character":{"height_m":1.65,"build":"slim","pose":"arms_out","cloak":"short","hood":false}}
+For anything else, even an object made for someone to use, return {"subject":"object"}."""
+
+OBJECT_PLACEMENT = """Build objects from the ground up. Each part's support locates its underside:
+0 = on the floor. A positive value is the 1-based index of its supporting part.
+-1 = freely positioned in world space, e.g. a side-mounted handle.
+For a shelf with two feet, give both feet support=0 and the shelf support=1. Never
+put a foot on the object it holds. Keep corner supports inside the top footprint,
+inset by half their width. Give at least one part of a floor-standing object support=0.
+Requested object:\n"""
+
+PRIMITIVE_NAMES = {
+    *PRIMITIVES,
+    "cube",
+    "куб",
+    "шар",
+    "сфера",
+    "цилиндр",
+    "конус",
+    "тор",
+    "труба",
+}
+
+SIMPLE_CHARACTER = (
+    re.compile(
+        r"(?:пожалуйста,? )?(?:(?:сделай|создай|построй|смоделируй|сгенерируй) )?"
+        r"(?:фигур[ау] )?человека?"
+        r"(?:(?P<cloak> с плащом| в плаще)(?: (?:с (?P<hood>капюшоном)|без капюшона))?"
+        r"| без плаща)?"
+    ),
+    re.compile(
+        r"(?:please,? )?(?:(?:create|make|model|generate) )?(?:a )?(?:human|person)"
+        r"(?:(?P<cloak> (?:with|in|wearing) a (?:cape|cloak))"
+        r"(?: (?:with a (?P<hood>hood)|without a hood))?| without a (?:cape|cloak))?"
+    ),
+)
+
+
+def simple_character(prompt):
+    # Match the whole request: quantities, measurements, negation and accessories
+    # outside this small grammar must reach the language model.
+    text = " ".join(prompt.casefold().split()).rstrip(".!?").strip()
+    for pattern in SIMPLE_CHARACTER:
+        match = pattern.fullmatch(text)
+        if match:
+            return {"cloak": "knee" if match["cloak"] else "none", "hood": bool(match["hood"])}
+    return None
+
+
+def checked_prompt(prompt):
+    if not isinstance(prompt, str) or len(prompt) > MAX_PROMPT or not prompt.strip():
+        raise ValueError(f"Введите описание от 1 до {MAX_PROMPT} символов")
+    return prompt.strip()
+
+
+def read_subject(data, detail):
+    if data == {"subject": "object"}:
+        return None, []
+    if not isinstance(data, dict) or data.keys() != {"subject", "character", "accessories"}:
+        raise ValueError(
+            "A figure requires a subject, its character recipe and its accessory list"
+        )
+    if data["subject"] != "character":
+        raise ValueError("Unknown subject")
+    accessories = data["accessories"]
+    if (
+        not isinstance(accessories, list)
+        or len(accessories) > MAX_PARTS
+        or any(
+            not isinstance(item, str)
+            or not item.strip()
+            or len(item) > MAX_ACCESSORY_DESCRIPTION
+            for item in accessories
+        )
+    ):
+        raise ValueError("List short descriptions of the requested accessories")
+    spec = data["character"]
+    if not isinstance(spec, dict) or spec.keys() != CHARACTER_SCHEMA["properties"].keys():
+        raise ValueError("A character needs height_m, build, pose, cloak and hood")
+    return build_character(spec, detail), accessories
+
 
 POINT_INSTRUCTIONS = """Translate the user's request to an operation on each local profile axis.
 Return one JSON object with both named axes. For every unchanged axis return null.
@@ -155,28 +284,75 @@ class Planner:
     def url(self, value):
         self._configured_url = value.rstrip("/") if value else None
 
-    def generate(self, prompt):
-        return self._plan(
-            prompt,
-            """Build from the ground up. Give each part a support value meaning 'my bottom rests on':
-0 = this part touches the floor. Positive = the 1-based index of a part BELOW this one.
--1 = freely positioned in world space, e.g. a side-mounted handle.
-Example: a stand with two feet and a shelf: feet are parts 1 and 2, support=0 for BOTH;
-shelf is part 3, support=1 (both feet have the same height). Its underside touches the feet.
-Never put a foot on the object that it holds up. For a floor-standing object at least one
-part has support=0. Keep corner supports inside the top footprint, inset by half their width.
-Emit only the requested object. User request follows.\n""",
-            SCENE,
-            assemble,
+    def generate(self, prompt, detail="medium"):
+        prompt = checked_prompt(prompt)
+        if detail not in DETAILS:
+            raise ValueError("Выберите уровень детализации")
+        spec = simple_character(prompt)
+        if spec is not None:
+            return build_character(spec, detail)
+        figure = None
+        if prompt.casefold().rstrip(".!?") not in PRIMITIVE_NAMES:
+            figure, accessories = self._plan(
+                prompt,
+                "",
+                SUBJECT,
+                lambda data: read_subject(data, detail),
+                instructions=SUBJECT_INSTRUCTIONS,
+                num_ctx=2048,
+                num_predict=192,
+            )
+            if figure is not None and not accessories:
+                return figure
+        if figure is None:
+            return self._plan(
+                prompt,
+                OBJECT_PLACEMENT,
+                parts_schema(MAX_PARTS),
+                lambda data: assemble(data, detail),
+            )
+
+        limit = MAX_PARTS - len(figure.parts)
+        anchors = {
+            p.name: [round(c, 5) for c in p.center]
+            for p in figure.parts
+            if p.name in ("Туловище", "Голова", "Кисть левая", "Кисть правая")
+        }
+        context = (
+            "The body, cloak and hood are already modelled as requested. Generate only these items: "
+            + json.dumps(accessories, ensure_ascii=False)
+            + ". Use support=-1 "
+            "and attach them in world space. The figure faces -Y. Landmark centres in metres: "
+            + json.dumps(anchors, ensure_ascii=False)
+            + "\nUser request:\n"
         )
 
+        def attach(data):
+            parts = data.get("parts") if isinstance(data, dict) else None
+            if not isinstance(parts, list) or not 1 <= len(parts) <= limit:
+                raise ValueError(f"Return 1 to {limit} requested accessory parts")
+            extras = assemble(data, detail)
+            return replace(figure, parts=figure.parts + extras.parts)
+
+        return self._plan(prompt, context, parts_schema(limit), attach)
+
     def edit(self, prompt, scene, index):
+        if type(index) is not int or not 0 <= index < len(scene.parts):
+            raise ValueError("Выберите существующую деталь")
+        original = scene.parts[index]
+        parts = scene.data()["parts"]
+        for part in parts:
+            # Loft sections are fixed anatomical controls. Dimensions and transforms
+            # suffice for this operation and fit into the constrained model context.
+            part.pop("sections", None)
         context = json.dumps(
-            {"selected": index + 1, "parts": scene.data()["parts"]},
+            {"parts": parts, "selected": index + 1},
             ensure_ascii=False,
             separators=(",", ":"),
         )
         editable = {k: v for k, v in PART["properties"].items() if k != "name"}
+        if original.shape not in PRIMITIVES:
+            editable["shape"] = {"type": "string", "enum": [original.shape, *PRIMITIVES]}
         patch_schema = {
             "type": "object",
             "properties": editable,
@@ -187,7 +363,6 @@ Emit only the requested object. User request follows.\n""",
         def apply_patch(patch):
             if not isinstance(patch, dict) or not patch or not patch.keys() <= editable.keys():
                 raise ValueError("Return only the changed geometry fields of the selected part")
-            original = scene.parts[index]
             updated = Part.parse(original.data() | patch)
             # Model decimals can echo a computed coordinate one floating-point step away.
             stable = {}
@@ -251,15 +426,23 @@ Emit only the requested object. User request follows.\n""",
             instructions=POINT_INSTRUCTIONS,
         )
 
-    def _plan(self, prompt, context, schema, parse, instructions=INSTRUCTIONS):
-        if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > MAX_PROMPT:
-            raise ValueError(f"Введите описание от 1 до {MAX_PROMPT} символов")
+    def _plan(
+        self,
+        prompt,
+        context,
+        schema,
+        parse,
+        instructions=INSTRUCTIONS,
+        num_ctx=8192,
+        num_predict=6000,
+    ):
+        prompt = checked_prompt(prompt)
         messages = [
             {"role": "system", "content": instructions},
-            {"role": "user", "content": context + prompt.strip()},
+            {"role": "user", "content": context + prompt},
         ]
         for attempt in range(2):
-            content = self._chat(messages, schema)
+            content = self._chat(messages, schema, num_ctx=num_ctx, num_predict=num_predict)
             try:
                 return parse(json.loads(content))
             except (ValueError, RecursionError) as exc:
@@ -272,14 +455,14 @@ Emit only the requested object. User request follows.\n""",
                     ]
                 )
 
-    def _chat(self, messages, schema):
+    def _chat(self, messages, schema, *, num_ctx, num_predict):
         payload = {
             "model": self.model,
             "stream": False,
             "think": False,
             "format": schema,
             "messages": messages,
-            "options": {"temperature": 0, "num_ctx": 8192, "num_predict": 6000},
+            "options": {"temperature": 0, "num_ctx": num_ctx, "num_predict": num_predict},
         }
         raw = post_chat(
             self._configured_url, self.model, json.dumps(payload).encode(), self.local_server

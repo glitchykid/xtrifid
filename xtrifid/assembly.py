@@ -2,11 +2,11 @@
 
 from dataclasses import replace
 
-from .geometry import build
+from .geometry import height_bounds
 from .model import MAX_LENGTH, Scene, vector
 
 
-def assemble(data):
+def assemble(data, detail="medium"):
     parts = Scene.parse(data).parts
     supports = [p.get("support") for p in data["parts"]]
     if any(type(s) is not int or not -1 <= s <= len(parts) for s in supports):
@@ -22,8 +22,7 @@ def assemble(data):
             raise ValueError("Cyclic support graph: parts cannot support each other")
         visiting.add(i)
         part = parts[i]
-        z = build(part, "render").vertices[:, 2]
-        bottom, top = float(z.min()), float(z.max())
+        bottom, top = height_bounds(part, detail)
         s = supports[i]
         if s >= 0:
             surface = 0.0
@@ -40,4 +39,4 @@ def assemble(data):
 
     for i in range(len(parts)):
         place(i)
-    return Scene(tuple(placed[i] for i in range(len(parts))))
+    return Scene(tuple(placed[i] for i in range(len(parts))), detail)

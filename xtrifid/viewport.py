@@ -30,7 +30,10 @@ void main(){
     if(passKind==3){color=vec4(1.,.80,.42,1);return;}
     if(passKind==2){color=vec4(.18,.21,.26,1);return;}
     if(passKind==1){color=vec4(.13,.17,.22,1);return;}
-    float light=.55+.45*max(dot(normalize(n),normalize(vec3(-.4,-.6,1.))),0.);
+    vec3 normal=normalize(n);
+    float key=max(dot(normal,normalize(vec3(-.4,-.6,1.))),0.);
+    float fill=max(dot(normal,normalize(vec3(.6,.7,.3))),0.);
+    float light=.43+.38*key+.19*fill;
     vec3 base=id==selected?vec3(.52,.86,.82):vec3(.77,.80,.88);
     color=vec4(base*light,1);
 }"""
@@ -106,24 +109,25 @@ class Viewport(Gtk.GLArea):
         if meshes:
             points = np.concatenate([mesh.vertices for mesh in meshes])
             lo, hi = points.min(axis=0), points.max(axis=0)
-            self.center = (lo + hi) / 2
-            self.radius = np.linalg.norm(hi - lo) / 2
-            floor = (lo[2] - self.center[2]) / self.radius - 0.006
+            center = (lo + hi) / 2
+            radius = np.linalg.norm(hi - lo) / 2
+            floor = (lo[2] - center[2]) / radius - 0.006
         else:
-            self.center = np.zeros(3)
-            self.radius = 1
+            center = np.zeros(3)
+            radius = 1
             floor = -0.5
-        surface, wire, self.owners = batches(meshes, self.center, self.radius)
-        self.pick_points = surface[:, :3].reshape(-1, 3, 3)
+        surface, wire, owners = batches(meshes, center, radius)
         grid = []
         for i in range(-12, 13):
             t = i / 5
             grid.extend(((t, -2.4, floor), (t, 2.4, floor), (-2.4, t, floor), (2.4, t, floor)))
         floor_lines = np.column_stack((grid, np.zeros((len(grid), 4))))
+        buffer = np.concatenate((surface, wire, floor_lines), dtype=np.float32)
+        # Keep the pick coordinates as a view of the same storage sent to OpenGL.
+        pick_points = buffer[: len(surface), :3].reshape(-1, 3, 3)
+        self.center, self.radius = center, radius
         self.counts = len(surface), len(wire), len(grid)
-        self.buffer = np.ascontiguousarray(
-            np.concatenate((surface, wire, floor_lines)), dtype=np.float32
-        )
+        self.buffer, self.owners, self.pick_points = buffer, owners, pick_points
         self.dirty = True
         self.queue_render()
 

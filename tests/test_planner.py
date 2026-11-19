@@ -65,18 +65,19 @@ class PlannerHTTPCase(unittest.TestCase):
 
 class PlannerTests(PlannerHTTPCase):
     def test_schema_generation_and_targeted_edit(self):
+        self.answer({"subject": "object"})
         self.answer(
             {"parts": [spec() | {"support": 0}, spec("sphere") | dict(name="Шар", support=1)]}
         )
         scene = self.client.generate("Опора с шаром")
         self.assertEqual(len(scene.parts), 2)
-        self.assertIn("parts", self.calls[0]["format"]["properties"])
+        self.assertIn("parts", self.calls[-1]["format"]["properties"])
         self.assertFalse(self.calls[0]["stream"])
         self.answer({"size": [1, 1, 1]})
         new = self.client.edit("Диаметр 1 метр", scene, 1)
         self.assertIsInstance(new, Part)
         self.assertEqual(new.size, (1, 1, 1))
-        self.assertIn("Шар", self.calls[1]["messages"][-1]["content"])
+        self.assertIn("Шар", self.calls[-1]["messages"][-1]["content"])
         self.assertEqual(scene.parts[0], Part.parse(spec()))
 
     def test_decimal_echo_during_edit_keeps_existing_coordinate(self):
@@ -87,6 +88,7 @@ class PlannerTests(PlannerHTTPCase):
         self.assertEqual(updated.size, (2, 3, 8))
 
     def test_planned_profiles_require_outline_in_decode_schema(self):
+        self.answer({"subject": "object"})
         self.answer(
             {
                 "parts": [
@@ -95,7 +97,7 @@ class PlannerTests(PlannerHTTPCase):
             }
         )
         self.client.generate("Полая втулка")
-        shapes = self.calls[0]["format"]["properties"]["parts"]["items"]["oneOf"]
+        shapes = self.calls[-1]["format"]["properties"]["parts"]["items"]["oneOf"]
         curved = next(s for s in shapes if "lathe" in s["properties"]["shape"]["enum"])
         self.assertIn("outline", curved["required"])
 
@@ -110,6 +112,7 @@ class PlannerTests(PlannerHTTPCase):
             self.client.generate("куб")
 
     def test_contact_constraints_allow_forward_references_and_rotation(self):
+        self.answer({"subject": "object"})
         self.answer(
             {
                 "parts": [
@@ -124,6 +127,7 @@ class PlannerTests(PlannerHTTPCase):
 
     def test_support_cycle_unknown_target_and_missing_support_are_rejected(self):
         for parts in ([spec() | {"support": 1}], [spec() | {"support": 2}], [spec()]):
+            self.answer({"subject": "object"})
             self.answer({"parts": parts})
             self.answer({"parts": parts})
             with self.assertRaises(PlannerError):
