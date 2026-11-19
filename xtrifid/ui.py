@@ -5,8 +5,9 @@ from pathlib import Path
 from xtrifid.gtk import Gio, GLib, Gtk, Pango
 
 from .geometry import build
+from .local_server import pull_model
 from .model import MAX_LENGTH, MIN_SIZE, MODES, Document, Part
-from .planner import MAX_PROMPT, Planner, PlannerError
+from .planner import MAX_PROMPT, ModelMissing, Planner, PlannerError
 from .profile import PROFILE_SHAPES, profile_guide
 from .profile_editor import ProfileEditor
 from .storage import export_obj, load_project, save_project
@@ -50,7 +51,7 @@ headerbar {background:#20252f;color:#e7eaf0;}
 
 
 class Studio(Gtk.ApplicationWindow):
-    def __init__(self, app):
+    def __init__(self, app, local_server=None):
         super().__init__(
             application=app, title="Xtrifid", default_width=1140, default_height=740
         )
@@ -61,7 +62,10 @@ class Studio(Gtk.ApplicationWindow):
             self.get_display(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
         self.doc = Document()
-        self.planner = Planner()
+        self.planner = Planner(local_server=local_server)
+        self.missing_model = None
+        self.cancel_download = threading.Event()
+        self.file_folder = None
         self.selected = 0
         self.busy = False
         self.closed = False
@@ -189,12 +193,15 @@ class Studio(Gtk.ApplicationWindow):
         self.status = label("", "muted")
         self.status.set_wrap(True)
         bottom.append(self.status)
+        self.download = button("Скачать модель", self.download_weights)
+        bottom.append(self.download)
         root.append(bottom)
         self.refresh()
         self.notify_status(f"Локальная модель · {self.planner.model}")
 
     def closing(self, *_):
         self.closed = True
+        self.cancel_download.set()
         return False
 
     def notify_status(self, message):
@@ -202,6 +209,8 @@ class Studio(Gtk.ApplicationWindow):
 
     def controls(self):
         scene = self.doc.scene is not None
+        self.download.set_visible(self.missing_model is not None)
+        self.download.set_sensitive(not self.busy)
         for w in (self.generate, self.prompt, self.opener, self.mode):
             w.set_sensitive(not self.busy)
         for w in (self.saver, self.exporter, self.inspector, self.part_list):
@@ -372,6 +381,35 @@ class Studio(Gtk.ApplicationWindow):
         if not prompt:
             self.notify_status("Введите текст запроса")
             return
+        self.missing_model = None
+        self.run_task(lambda: compute(prompt), apply, progress)
+
+    def download_weights(self):
+        missing = self.missing_model
+        if self.busy or missing is None:
+            return
+
+        def report(message):
+            GLib.idle_add(show_progress, message)
+
+        def show_progress(message):
+            if self.busy and not self.closed and self.missing_model is missing:
+                self.notify_status(message)
+            return False
+
+        def complete(_):
+            self.missing_model = None
+            self.notify_status(f"Модель {missing.model} загружена. Повторите запрос.")
+
+        self.run_task(
+            lambda: pull_model(
+                missing.url, missing.model, report, self.cancel_download, opener=missing.opener
+            ),
+            complete,
+            f"Загрузка {missing.model}…",
+        )
+
+    def run_task(self, compute, apply, progress):
         scene = self.doc.scene
         self.busy = True
         self.controls()
@@ -381,8 +419,12 @@ class Studio(Gtk.ApplicationWindow):
             if self.closed:
                 return False
             self.busy = False
-            if error:
-                self.notify_status(error)
+            if isinstance(error, ModelMissing):
+                self.missing_model = error
+                size = " (около 3,3 ГБ)" if error.model == "qwen3.5:4b" else ""
+                self.notify_status(f"Для генерации нужна модель {error.model}{size}.")
+            elif error:
+                self.notify_status(str(error))
             elif self.doc.scene is not scene:
                 self.notify_status("Во время запроса сцена изменилась. Повторите правку.")
             else:
@@ -392,13 +434,25 @@ class Studio(Gtk.ApplicationWindow):
 
         def work():
             try:
-                value = compute(prompt)
+                value = compute()
             except (PlannerError, ValueError) as exc:
-                GLib.idle_add(finish, None, str(exc))
+                GLib.idle_add(finish, None, exc)
             else:
                 GLib.idle_add(finish, value, None)
 
         threading.Thread(target=work, daemon=True).start()
+
+    def open_project(self, file):
+        path = file.get_path()
+        try:
+            if not path:
+                raise ValueError("Выберите локальный файл")
+            self.install(*load_project(path))
+        except (OSError, ValueError, RecursionError) as exc:
+            self.notify_status(f"Ошибка файла · {exc}")
+            return
+        self.file_folder = str(Path(path).parent)
+        self.notify_status(f"Файл открыт · {path}")
 
     def file_dialog(self, action):
         opening = action == "open"
@@ -409,7 +463,7 @@ class Studio(Gtk.ApplicationWindow):
                 action
             ]
         )
-        folder = os.environ.get("XTRIFID_FILES", str(Path.cwd()))
+        folder = os.environ.get("XTRIFID_FILES") or self.file_folder or str(Path.home())
         dialog.set_initial_folder(Gio.File.new_for_path(folder))
         file_filter = Gtk.FileFilter()
         file_filter.set_name("Xtrifid (*.xtri)" if project else "Wavefront OBJ (*.obj)")
@@ -424,16 +478,18 @@ class Studio(Gtk.ApplicationWindow):
         def done(sender, result):
             try:
                 file = (sender.open_finish if opening else sender.save_finish)(result)
+                if opening:
+                    self.open_project(file)
+                    return
                 path = file.get_path()
                 if not path:
                     raise ValueError("Выберите локальный файл")
-                if opening:
-                    self.install(*load_project(path))
-                elif project:
+                if project:
                     save_project(path, self.doc.scene, self.doc.mode)
                 else:
                     export_obj(path, self.doc.scene, self.doc.mode)
-                self.notify_status(f"Файл {'открыт' if opening else 'записан'} · {path}")
+                self.file_folder = str(Path(path).parent)
+                self.notify_status(f"Файл записан · {path}")
             except GLib.Error as exc:
                 if not exc.matches(Gtk.dialog_error_quark(), Gtk.DialogError.DISMISSED):
                     self.notify_status(exc.message)
