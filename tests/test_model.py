@@ -30,6 +30,7 @@ class MeshTests(unittest.TestCase):
         )
         shapes.append(spec("lathe", outline=[[0.5, 0], [1, 0], [1, 1], [0.5, 1]]))
         shapes.append(spec("lathe", outline=[[0, 0], [0.7, 0], [1, 0.3], [0.6, 1], [0, 1]]))
+        shapes.append(spec("tube", inner_diameter=1))
         for shape in shapes:
             for mode in ("game", "render"):
                 with self.subTest(shape=shape["shape"], mode=mode):
@@ -61,6 +62,16 @@ class MeshTests(unittest.TestCase):
         np.testing.assert_allclose(np.ptp(v, axis=0), p.size)
         with self.assertRaises(ValueError):
             Part.parse(spec("lathe", outline=[[0, 0.5], [1, 0], [1, 1]]))
+
+    def test_tube_bore_is_measured_in_metres(self):
+        p = Part.parse(spec("tube", inner_diameter=0.04) | {"size": [0.08, 0.08, 0.06]})
+        v = build(p, "render").vertices
+        diameters = 2 * np.linalg.norm(v[:, :2], axis=1)
+        self.assertAlmostEqual(diameters.min(), 0.04)
+        self.assertAlmostEqual(diameters.max(), 0.08)
+        for bore in (None, 0, 0.08, True):
+            with self.assertRaises(ValueError):
+                Part.parse(p.data() | {"inner_diameter": bore})
 
     def test_silhouette_and_curved_density(self):
         for shape in ("box", "sphere", "cylinder", "torus"):

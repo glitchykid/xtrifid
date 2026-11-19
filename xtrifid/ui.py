@@ -131,6 +131,14 @@ class Studio(Gtk.ApplicationWindow):
                 row.append(group)
                 self.fields[attr].append(spin)
             self.inspector.append(row)
+        self.bore_row = Gtk.Box(spacing=6)
+        self.bore_row.append(label("Внутренний диаметр, м", "muted"))
+        self.bore = Gtk.SpinButton.new_with_range(0.000001, MAX_LENGTH, 0.001)
+        self.bore.set_digits(6)
+        accessible(self.bore, "Внутренний диаметр по X, м")
+        self.bore_row.append(self.bore)
+        self.inspector.append(self.bore_row)
+        self.bore_row.set_visible(False)
         self.inspector.append(button("Применить значения", self.apply_numeric))
         self.inspector.append(Gtk.Separator())
         self.inspector.append(label("Правка выбранной детали", "section"))
@@ -224,6 +232,10 @@ class Studio(Gtk.ApplicationWindow):
             for spin, value in zip(fields, getattr(part, attr)):
                 spin.set_value(value)
                 self.field_text[spin] = spin.get_text()
+        self.bore_row.set_visible(part.inner_diameter is not None)
+        if part.inner_diameter is not None:
+            self.bore.set_value(part.inner_diameter)
+            self.field_text[self.bore] = self.bore.get_text()
         self.view.selected = index
         self.view.queue_render()
 
@@ -256,7 +268,18 @@ class Studio(Gtk.ApplicationWindow):
                     spin.update()
                     updated[i] = spin.get_value()
             values[key] = updated
-        self.doc.replace(self.selected, Part.parse(values))
+        if (
+            part.inner_diameter is not None
+            and self.bore.get_text() != self.field_text[self.bore]
+        ):
+            self.bore.update()
+            values["inner_diameter"] = self.bore.get_value()
+        try:
+            updated_part = Part.parse(values)
+        except ValueError as exc:
+            self.notify_status(str(exc))
+            return
+        self.doc.replace(self.selected, updated_part)
         self.refresh()
         self.notify_status(f"Размеры и положение применены · {part.name}")
 

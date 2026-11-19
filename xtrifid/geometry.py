@@ -108,7 +108,11 @@ def build(part, mode):
         outline = part.outline or ((0, 0), (1, 0), (1, 1), (0, 1))
         vertices, faces, smooth = prism(outline)
     else:
-        vertices, faces, smooth = radial(part.shape, 16 if mode == "game" else 48, part.outline)
+        shape, outline = part.shape, part.outline
+        if shape == "tube":
+            hole = part.inner_diameter / part.size[0]
+            shape, outline = "lathe", ((hole, 0), (1, 0), (1, 1), (hole, 1))
+        vertices, faces, smooth = radial(shape, 16 if mode == "game" else 48, outline)
     if mode == "game":
         smooth = [s for face, s in zip(faces, smooth) for _ in range(len(face) - 2)]
         faces = list(triangles(faces))

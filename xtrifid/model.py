@@ -3,7 +3,7 @@ from math import isfinite
 
 from .polygon import normalize_outline, triangulate
 
-SHAPES = ("box", "cylinder", "sphere", "cone", "torus", "extrusion", "lathe")
+SHAPES = ("box", "cylinder", "sphere", "cone", "torus", "extrusion", "lathe", "tube")
 MODES = ("game", "render")
 MAX_PARTS = 48
 MAX_OUTLINE = 32
@@ -28,6 +28,7 @@ class Part:
     center: tuple
     rotation: tuple
     outline: tuple = ()
+    inner_diameter: float | None = None
 
     @classmethod
     def parse(cls, data):
@@ -59,19 +60,30 @@ class Part:
                     raise ValueError("Профиль вращения может касаться оси только одним ребром")
             else:
                 triangulate(outline)
+        size = vector(data.get("size"), 3, MIN_SIZE, MAX_LENGTH)
+        bore = data.get("inner_diameter") if shape == "tube" else None
+        if shape == "tube" and (
+            type(bore) not in (int, float) or not 0.000001 <= bore < size[0]
+        ):
+            raise ValueError(
+                "Внутренний диаметр должен быть положительным и меньше наружного размера X"
+            )
         return cls(
             name.strip(),
             shape,
-            vector(data.get("size"), 3, MIN_SIZE, MAX_LENGTH),
+            size,
             vector(data.get("center"), 3, -MAX_LENGTH, MAX_LENGTH),
             vector(data.get("rotation"), 3, -360, 360),
             outline,
+            bore,
         )
 
     def data(self):
         data = asdict(self)
         if not self.outline:
             del data["outline"]
+        if self.inner_diameter is None:
+            del data["inner_diameter"]
         return data
 
 

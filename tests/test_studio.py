@@ -62,6 +62,25 @@ class StudioTests(unittest.TestCase):
         window.undo()
         self.assertEqual(window.doc.scene, scene)
 
+    def test_tube_inspector_rejects_closed_bore_without_changing_scene(self):
+        app = Gtk.Application(
+            application_id="io.github.glitchykid.Xtrifid.BoreTest",
+            flags=Gio.ApplicationFlags.NON_UNIQUE,
+        )
+        app.register(None)
+        window = Studio(app)
+        self.addCleanup(window.close)
+        scene = Scene.parse({"parts": [spec("tube", inner_diameter=1)]})
+        window.install(scene, "render")
+        self.assertTrue(window.bore_row.get_visible())
+        window.bore.set_value(2.5)
+        window.apply_numeric()
+        self.assertEqual(window.doc.scene, scene)
+        self.assertIn("диаметр", window.status.get_text())
+        window.bore.set_value(0.5)
+        window.apply_numeric()
+        self.assertEqual(window.doc.scene.parts[0].inner_diameter, 0.5)
+
     def test_export_dialog_writes_selected_mesh_at_small_window_size(self):
         import tempfile
         from pathlib import Path

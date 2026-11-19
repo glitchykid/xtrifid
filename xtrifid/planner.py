@@ -31,6 +31,7 @@ PART = {
         "size": numbers(3, MIN_SIZE, MAX_LENGTH),
         "center": numbers(3, -MAX_LENGTH, MAX_LENGTH),
         "rotation": numbers(3, -360, 360),
+        "inner_diameter": {"type": "number", "minimum": 0.000001, "maximum": MAX_LENGTH},
         "outline": {
             "type": "array",
             "minItems": 3,
@@ -42,11 +43,10 @@ PART = {
 }
 
 
-def placed_schema(shapes, uses_outline):
-    properties = PART["properties"].copy()
+def placed_schema(shapes, extra=()):
+    keys = PART["required"] + list(extra)
+    properties = {key: PART["properties"][key] for key in keys}
     properties["shape"] = {"type": "string", "enum": shapes}
-    if not uses_outline:
-        del properties["outline"]
     properties["support"] = {"type": "integer", "minimum": -1, "maximum": MAX_PARTS}
     return {
         "type": "object",
@@ -59,8 +59,9 @@ def placed_schema(shapes, uses_outline):
 PROFILE_SHAPES = ("extrusion", "lathe")
 PLACED_PART = {
     "oneOf": [
-        placed_schema([s for s in SHAPES if s not in PROFILE_SHAPES], False),
-        placed_schema(list(PROFILE_SHAPES), True),
+        placed_schema([s for s in SHAPES if s not in (*PROFILE_SHAPES, "tube")]),
+        placed_schema(list(PROFILE_SHAPES), ("outline",)),
+        placed_schema(["tube"], ("inner_diameter",)),
     ]
 }
 SCENE = {
@@ -78,12 +79,14 @@ Respect quantities, dimensions, relative placement, negative space and symmetry.
 Model the requested object in recognisable separate named pieces, with real dimensions
 and sensible connections. Put the base on z=0 unless asked otherwise. Name each piece
 uniquely in the language of the user. Sphere can be an ellipsoid. Cone points along +Z.
-Torus hole faces +Z. For custom silhouettes use extrusion: outline is an ordered
+A cylindrical item has size [outer diameter, outer diameter, length] in metres.
+For a bushing, hollow straight pipe, sleeve, or flat washer use tube. For tube,
+inner_diameter is the full width of the opening in metres. Torus hole faces +Z. For custom silhouettes use extrusion: outline is an ordered
 simple XY polygon of 3-32 points in [-1,1], implicitly closed, with no duplicate or
 collinear vertices. Its extents stretch to size X and Y, and it extrudes along Z.
-For a vase, bottle, hollow tube or other turned solid, use lathe. Its outline
+For a vase, bottle or other turned solid, use lathe. Its outline
 is the closed wall cross-section [radius, height], both in [0,1], before rotation
-around Z. A hollow tube has outline [[0.7,0],[1,0],[1,1],[0.7,1]].
+around Z.
 Omit outline for other shapes. No materials, ground plane or surrounding scenery."""
 
 
