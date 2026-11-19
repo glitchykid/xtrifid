@@ -24,6 +24,11 @@ class ConnectionTests(PlannerHTTPCase):
         self.enterContext(patch.dict(os.environ, {}, clear=True))
         self.enterContext(patch.object(ollama, "DEFAULT_URL", self.unavailable))
         self.bridge = self.enterContext(patch.object(ollama, "docker_url", return_value=None))
+        self.enterContext(
+            patch.object(
+                ollama, "_inspect_service", return_value="mock 1 6442450944 4000000000"
+            )
+        )
         self.managed = Mock()
         self.managed.start.return_value = self.service
 

@@ -2,9 +2,11 @@ import json
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from unittest.mock import patch
 
 from test_model import spec
 
+from xtrifid import resources
 from xtrifid.model import Part, Scene
 from xtrifid.planner import Planner, PlannerError
 
@@ -13,15 +15,32 @@ class PlannerHTTPCase(unittest.TestCase):
     def setUp(self):
         self.calls = []
         self.answers = []
+        self.capacity = self.enterContext(
+            patch.object(resources, "capacity", return_value=resources.Capacity(10 << 30, 8))
+        )
+        self.models = [
+            {"name": name, "size": 128 << 20, "digest": name}
+            for name in ("test:latest", "native-model:latest", "example:3b", "qwen3.5:4b")
+        ]
+        self.running_models = []
         test = self
 
         class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                inventory = {"/api/tags": test.models, "/api/ps": test.running_models}
+                test.assertIn(self.path, inventory)
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(json.dumps({"models": inventory[self.path]}).encode())
+
             def do_POST(self):
                 test.assertEqual(self.path, "/api/chat")
                 test.calls.append(
                     json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 )
                 answer = test.answers.pop(0)
+                if callable(answer):
+                    answer = answer()
                 if answer is None:
                     self.close_connection = True
                     return

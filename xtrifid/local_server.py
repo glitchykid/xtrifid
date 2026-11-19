@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener
 
+from . import resources
 from .ollama import PlannerError
 
 _direct_open = build_opener(ProxyHandler({})).open
@@ -24,28 +25,53 @@ class LocalServer:
         self._closed = threading.Event()
         self._process = None
         self._url = None
+        self._memory_limit = 0
 
     def start(self):
         with self._lock:
             if self._closed.is_set():
                 raise PlannerError("Студия закрывается")
             if self._process is None or self._process.poll() is not None:
+                capacity = resources.capacity()
+                if capacity.headroom < 256 * resources.MIB:
+                    raise PlannerError("Недостаточно памяти для запуска встроенной Ollama.")
                 try:
                     with socket.socket() as probe:
                         probe.bind(("127.0.0.1", 0))
                         address = f"127.0.0.1:{probe.getsockname()[1]}"
                     env = dict(
-                        os.environ, OLLAMA_HOST=address, OLLAMA_NO_CLOUD="1", OLLAMA_NOPRUNE="1"
+                        os.environ,
+                        OLLAMA_HOST=address,
+                        OLLAMA_NO_CLOUD="1",
+                        OLLAMA_NOPRUNE="1",
+                        OLLAMA_NUM_PARALLEL="1",
+                        OLLAMA_MAX_LOADED_MODELS="1",
+                        OLLAMA_MAX_QUEUE="1",
+                        OLLAMA_KEEP_ALIVE="0",
+                        OLLAMA_CONTEXT_LENGTH="4096",
+                        OLLAMA_LOAD_TIMEOUT="2m",
+                        OLLAMA_MAX_TRANSFER_STREAMS="1",
+                        GOMAXPROCS=str(capacity.threads),
+                        OMP_NUM_THREADS=str(capacity.threads),
                     )
-                    self._process = subprocess.Popen(
-                        [self.executable, "serve"],
-                        env=env,
-                        start_new_session=True,
-                        stdin=subprocess.DEVNULL,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
+                    # Linux affinity applies to this calling thread. The new Go service
+                    # and all its workers inherit the mask before they can create threads.
+                    affinity = os.sched_getaffinity(0)
+                    os.sched_setaffinity(0, sorted(affinity)[: capacity.threads])
+                    try:
+                        self._process = subprocess.Popen(
+                            [self.executable, "serve"],
+                            env=env,
+                            start_new_session=True,
+                            stdin=subprocess.DEVNULL,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                    finally:
+                        os.sched_setaffinity(0, affinity)
+                    self._memory_limit = capacity.headroom
                 except OSError as exc:
+                    self._stop()
                     raise PlannerError(
                         f"Не удалось запустить встроенную Ollama: {exc.strerror}"
                     ) from exc
@@ -74,17 +100,36 @@ class LocalServer:
     def _stop(self):
         proc = self._process
         self._process = None
-        if proc is None or proc.poll() is not None:
+        if proc is None or proc.returncode is not None:
             return
         try:
             os.killpg(proc.pid, signal.SIGTERM)
-            try:
-                proc.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                os.killpg(proc.pid, signal.SIGKILL)
-                proc.wait()
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                # Retain ownership of the process-group ID until surviving workers
+                # have also been signalled, even if the server exits first.
+                if os.waitid(os.P_PID, proc.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT):
+                    break
+                time.sleep(0.03)
+            os.killpg(proc.pid, signal.SIGKILL)
         except ProcessLookupError:
-            proc.wait()
+            pass
+        proc.wait()
+
+    def over_memory_limit(self, url):
+        with self._lock:
+            if self._url != url or self._process is None:
+                return False
+            try:
+                return resources.process_tree_rss(self._process.pid) > self._memory_limit
+            except (OSError, ValueError, IndexError):
+                return True
+
+    def reclaim(self, url):
+        """Stop only our private process group and allow a smaller job to restart it."""
+        with self._lock:
+            if self._url == url:
+                self._stop()
 
     def close(self):
         self._closed.set()
@@ -92,15 +137,18 @@ class LocalServer:
             self._stop()
 
 
-def pull_model(url, model, on_progress, cancelled, *, opener=_direct_open):
+def pull_model(url, model, on_progress, cancelled, *, opener=_direct_open, memory_limit=None):
     if cancelled.is_set():
         raise PlannerError("Загрузка отменена")
+    if resources.capacity().headroom < 256 * resources.MIB:
+        raise PlannerError("Недостаточно памяти для загрузки весов.")
     request = Request(
         url.rstrip("/") + "/api/pull",
         data=json.dumps({"model": model, "stream": True}).encode(),
         headers={"Content-Type": "application/json"},
     )
     last_message = None
+    layers = {}
     try:
         with opener(request, timeout=300) as response:
             while not cancelled.is_set():
@@ -120,6 +168,21 @@ def pull_model(url, model, on_progress, cancelled, *, opener=_direct_open):
                 if not isinstance(status, str):
                     raise ValueError
                 done, total = frame.get("completed"), frame.get("total")
+                digest = frame.get("digest")
+                if type(total) is int and total > 0 and isinstance(digest, str):
+                    if total > layers.get(digest, 0):
+                        layers[digest] = total
+                        headroom = resources.capacity().headroom
+                        if memory_limit is not None:
+                            headroom = min(headroom, memory_limit)
+                        if (
+                            len(layers) > 4096
+                            or resources.model_working_bytes(sum(layers.values()), 2048)
+                            > headroom
+                        ):
+                            raise PlannerError(
+                                "Загрузка остановлена: для объявленного размера модели недостаточно памяти."
+                            )
                 message = f"Загрузка {model}…"
                 if (
                     type(done) is int

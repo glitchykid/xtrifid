@@ -2,7 +2,6 @@
 set -eu
 cd "$(dirname "$0")"
 : "${DISPLAY:?Start from an X11 or XWayland desktop}"
-model=${XTRIFID_MODEL:-qwen3.5:4b}
 umask 077
 auth=$(mktemp)
 trap 'rm -f "$auth"' EXIT
@@ -14,10 +13,12 @@ fi
 # FamilyWild permits the same cookie inside the container hostname.
 printf '%s\n' "$cookie" | sed 's/^..../ffff/' | xauth -f "$auth" nmerge -
 mkdir -p exports
+docker compose build studio
+limits=$(docker compose run --rm --no-deps -T --entrypoint python3 studio -m xtrifid.resources)
+XTRIFID_RUNNER_MEMORY=${limits% *}
+XTRIFID_RUNNER_CPUS=${limits#* }
+export XTRIFID_RUNNER_MEMORY XTRIFID_RUNNER_CPUS
 docker compose up --wait ollama
-if ! docker compose exec -T ollama ollama show "$model" >/dev/null 2>&1; then
-    docker compose exec -T ollama ollama pull "$model"
-fi
-docker compose run --build --rm --no-deps --user "$(id -u):$(id -g)" \
+docker compose run --rm --no-deps --user "$(id -u):$(id -g)" \
     -e DISPLAY -e XAUTHORITY=/tmp/xtrifid.xauth \
     -v "$auth:/tmp/xtrifid.xauth:ro" -v /tmp/.X11-unix:/tmp/.X11-unix:ro studio
