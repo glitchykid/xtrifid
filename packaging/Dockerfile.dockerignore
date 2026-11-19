@@ -1,0 +1,6 @@
+*
+!packaging/
+!packaging/**
+!xtrifid/
+!xtrifid/**
+**/__pycache__/
