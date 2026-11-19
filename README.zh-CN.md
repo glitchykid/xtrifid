@@ -4,7 +4,26 @@
 
 用文字描述物体，在 GTK 窗口中查看网格，再单独修改某个部件。本地语言模型负责规划部件组合，几何引擎按米为单位生成网格。界面语言为俄语。
 
-## 在 Linux 上运行
+## Linux 可执行文件
+
+此文件适用于 x86-64 Linux，需要 glibc 2.39 或更高版本、图形桌面和 OpenGL 3.3。Linux Mint 22 和 Ubuntu 24.04 满足发行版要求。文件中已包含 Python、GTK 和 CPU 版 Ollama。 [下载 Linux 版 Xtrifid](https://github.com/glitchykid/xtrifid/releases/latest/download/xtrifid-linux-x86_64)
+
+在下载目录运行以下命令。赋予执行权限后，也可以双击文件启动。
+
+```sh
+chmod +x ./xtrifid-linux-x86_64
+./xtrifid-linux-x86_64
+```
+
+启动时传入已保存工程的路径即可直接打开，每个工程使用独立窗口。预览、数值编辑和 OBJ 导出均可离线使用。
+
+```sh
+./xtrifid-linux-x86_64 "model.xtri"
+```
+
+收到生成请求时，程序会查找本机运行的 Ollama，包括 Linux 上 Xtrifid 的 Docker 服务。如果找不到服务，就启动内置 CPU 引擎。若首次请求时缺少权重，请点击 **Скачать модель** 下载 `qwen3.5:4b`（约 3.3 GB），然后再次提交请求。内置引擎将权重保存在 `~/.ollama/models`，之后即可离线生成。可用 `OLLAMA_MODELS` 更换权重目录，用 `OLLAMA_URL` 指定服务器，或用 `XTRIFID_MODEL` 选择支持结构化输出的模型。
+
+## 从源码通过 Docker 运行
 
 需要 Docker Engine、Compose、Git、`xauth`，以及支持 OpenGL 3.3 的 X11 或 XWayland 桌面。也可以使用 Mesa 软件渲染。首次运行会下载容器镜像和约 3.3 GB 的 Qwen 权重。已在配备 16 GB 内存的 CPU 环境中验证。
 
@@ -21,7 +40,7 @@ cd xtrifid
 1. 在 **Описание модели** 输入“做一张方凳，凳面长宽各 40 厘米，厚 4 厘米，四角各有一条高 40 厘米的凳腿”。选择配置后点击 **Создать модель**。
 2. 拖动可旋转，滚动可缩放。点击视图中的部件或从 **Детали** 列表选择部件。点击 **Сетка** 可查看多边形边线。视图获得焦点时，可用方向键旋转、+/− 缩放、Home 显示整个模型。
 3. 输入“只把凳面厚度改为 8 厘米”，点击 **Изменить деталь**。也可以直接输入 XYZ 尺寸、中心坐标或旋转角，再点击 **Применить значения**。点击 **Отменить действие** 可撤销上一次操作。
-4. **Сохранить** 保存可继续编辑的 `.xtri` 工程，**Открыть** 打开工程，**Экспорт OBJ** 导出当前网格。在对话框中选择 `/exports`，即可在宿主机的 `./exports` 目录中找到文件。
+4. **Сохранить** 保存可继续编辑的 `.xtri` 工程，**Открыть** 打开工程，**Экспорт OBJ** 导出当前网格。运行可执行文件时，文件会直接保存到所选目录。在 Docker 中选择 `/exports`，即可在宿主机的 `./exports` 中找到文件。
 
 ## 单独修改一个角或圆环
 
@@ -40,9 +59,11 @@ cd xtrifid
 
 ## 常见问题
 
-- **预览黑屏或出现 `MESA: error: Failed to attach to x11 shm`。** 如果通过 Git 安装，请运行 `git pull --ff-only`，然后重新运行 `./studio`。如果使用源码压缩包，请下载 0.2.1 或更新版本。启动脚本会重新构建镜像，更新后的 Mesa 驱动可以在 Docker 共享内存隔离的情况下显示画面。
-- **窗口无法打开。** 在图形会话的终端中运行，并检查 `echo "$DISPLAY"` 和 `xauth info`。启动脚本会向容器传递当前显示器的认证 cookie。
-- **Ollama 报错或首次响应较慢。** 运行 `docker compose logs --tail 40 ollama` 和 `docker compose exec ollama ollama list`。CPU 首次加载模型需要一些时间。请求失败后，原有场景会保留。
+- **可执行文件无法打开。** 检查执行权限和图形会话，并用 `ldd --version` 查看 glibc 版本。如果系统提示缺少所需的 `GLIBC` 版本，请使用上面的 Docker 运行方式。
+- **权重下载中断。** 检查服务器的可用磁盘空间和网络连接。如果提示 TLS 错误，还需检查服务器系统信任的 CA 证书。然后再次点击 **Скачать модель**。CPU 首次生成可能需要几分钟。
+- **Docker** · **预览黑屏或出现 `MESA: error: Failed to attach to x11 shm`。** 如果通过 Git 安装，请运行 `git pull --ff-only`，然后重新运行 `./studio`。如果使用源码压缩包，请下载 0.2.1 或更新版本。启动脚本会重新构建镜像，更新后的 Mesa 驱动可以在 Docker 共享内存隔离的情况下显示画面。
+- **Docker** · **窗口无法打开。** 在图形会话的终端中运行，并检查 `echo "$DISPLAY"` 和 `xauth info`。启动脚本会向容器传递当前显示器的认证 cookie。
+- **Docker** · **Ollama 报错或首次响应较慢。** 运行 `docker compose logs --tail 40 ollama` 和 `docker compose exec ollama ollama list`。CPU 首次加载模型需要一些时间。请求失败后，原有场景会保留。
 - **形状与预期不符。** 明确数量、单位和接触位置。检查轮廓和网格后，选择需要修改的部件。
 
 反馈问题时请提供输入描述、网格配置和复现步骤。[GitHub Issues](https://github.com/glitchykid/xtrifid/issues) · [架构与 Docker 测试](docs/architecture.md)
