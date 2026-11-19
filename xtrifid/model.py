@@ -3,7 +3,7 @@ from math import isfinite
 
 from .polygon import normalize_outline, triangulate
 
-SHAPES = ("box", "cylinder", "sphere", "cone", "torus", "extrusion")
+SHAPES = ("box", "cylinder", "sphere", "cone", "torus", "extrusion", "lathe")
 MODES = ("game", "render")
 MAX_PARTS = 48
 MAX_OUTLINE = 32
@@ -45,12 +45,20 @@ class Part:
         if shape not in SHAPES:
             raise ValueError("Неизвестная форма детали")
         outline = ()
-        if shape == "extrusion":
+        if shape in ("extrusion", "lathe"):
             raw = data.get("outline")
             if not isinstance(raw, (list, tuple)) or not 3 <= len(raw) <= MAX_OUTLINE:
-                raise ValueError("Для выдавливания нужен контур из 3–32 точек")
+                raise ValueError("Для этой формы нужен контур из 3–32 точек")
             outline = normalize_outline(tuple(vector(p, 2, -1, 1) for p in raw))
-            triangulate(outline)
+            if shape == "lathe":
+                axis = [i for i, (r, _) in enumerate(outline) if r == 0]
+                if any(r < 0 for r, z in outline) or (
+                    axis
+                    and (len(axis) != 2 or (axis[1] - axis[0]) not in (1, len(outline) - 1))
+                ):
+                    raise ValueError("Профиль вращения может касаться оси только одним ребром")
+            else:
+                triangulate(outline)
         return cls(
             name.strip(),
             shape,

@@ -1,0 +1,37 @@
+name: xtrifid
+services:
+  ollama:
+    image: ollama/ollama:0.40.16@sha256:910d0d8107b538fb0894e63163eb195de0cc7aefcbc666dc62d3b18f71124592
+    volumes:
+      - weights:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+  studio:
+    build:
+      context: .
+      target: runtime
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_URL: http://ollama:11434
+      XTRIFID_MODEL: ${XTRIFID_MODEL:-qwen3.5:4b}
+      GDK_BACKEND: x11
+      HOME: /tmp
+      XTRIFID_FILES: /exports
+    volumes:
+      - ./exports:/exports
+  tests:
+    init: true
+    profiles: [dev]
+    build:
+      context: .
+      target: test
+    environment:
+      OLLAMA_URL: http://ollama:11434
+      XTRIFID_MODEL: ${XTRIFID_MODEL:-qwen3.5:4b}
+volumes:
+  weights:

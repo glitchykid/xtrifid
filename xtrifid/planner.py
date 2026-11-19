@@ -6,7 +6,8 @@ import os
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from .model import MAX_LENGTH, MAX_OUTLINE, MAX_PARTS, MIN_SIZE, SHAPES, Part, Scene
+from .assembly import assemble
+from .model import MAX_LENGTH, MAX_OUTLINE, MAX_PARTS, MIN_SIZE, SHAPES, Part
 
 MAX_PROMPT = 2000
 RESPONSE_LIMIT = 524288
@@ -39,12 +40,35 @@ PART = {
     },
     "required": ["name", "shape", "size", "center", "rotation"],
 }
+
+
+def placed_schema(shapes, uses_outline):
+    properties = PART["properties"].copy()
+    properties["shape"] = {"type": "string", "enum": shapes}
+    if not uses_outline:
+        del properties["outline"]
+    properties["support"] = {"type": "integer", "minimum": -1, "maximum": MAX_PARTS}
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": properties,
+        "required": list(properties),
+    }
+
+
+PROFILE_SHAPES = ("extrusion", "lathe")
+PLACED_PART = {
+    "oneOf": [
+        placed_schema([s for s in SHAPES if s not in PROFILE_SHAPES], False),
+        placed_schema(list(PROFILE_SHAPES), True),
+    ]
+}
 SCENE = {
     "type": "object",
     "additionalProperties": False,
     "required": ["parts"],
     "properties": {
-        "parts": {"type": "array", "minItems": 1, "maxItems": MAX_PARTS, "items": PART}
+        "parts": {"type": "array", "minItems": 1, "maxItems": MAX_PARTS, "items": PLACED_PART}
     },
 }
 INSTRUCTIONS = """You are a precision 3D modeller. Output only JSON following the schema.
@@ -57,6 +81,9 @@ uniquely in the language of the user. Sphere can be an ellipsoid. Cone points al
 Torus hole faces +Z. For custom silhouettes use extrusion: outline is an ordered
 simple XY polygon of 3-32 points in [-1,1], implicitly closed, with no duplicate or
 collinear vertices. Its extents stretch to size X and Y, and it extrudes along Z.
+For a vase, bottle, hollow tube or other turned solid, use lathe. Its outline
+is the closed wall cross-section [radius, height], both in [0,1], before rotation
+around Z. A hollow tube has outline [[0.7,0],[1,0],[1,1],[0.7,1]].
 Omit outline for other shapes. No materials, ground plane or surrounding scenery."""
 
 
@@ -70,7 +97,19 @@ class Planner:
         self.model = model or os.getenv("XTRIFID_MODEL", "qwen3.5:4b")
 
     def generate(self, prompt):
-        return self._plan(prompt, "", SCENE, Scene.parse)
+        return self._plan(
+            prompt,
+            """Build from the ground up. Give each part a support value meaning 'my bottom rests on':
+0 = this part touches the floor. Positive = the 1-based index of a part BELOW this one.
+-1 = freely positioned in world space, e.g. a side-mounted handle.
+Example: a stand with two feet and a shelf: feet are parts 1 and 2, support=0 for BOTH;
+shelf is part 3, support=1 (both feet have the same height). Its underside touches the feet.
+Never put a foot on the object that it holds up. For a floor-standing object at least one
+part has support=0. Keep corner supports inside the top footprint, inset by half their width.
+Emit only the requested object. User request follows.\n""",
+            SCENE,
+            assemble,
+        )
 
     def edit(self, prompt, scene, index):
         context = json.dumps(
@@ -78,13 +117,26 @@ class Planner:
             ensure_ascii=False,
             separators=(",", ":"),
         )
+        editable = {k: v for k, v in PART["properties"].items() if k != "name"}
+        patch_schema = {
+            "type": "object",
+            "properties": editable,
+            "minProperties": 1,
+            "additionalProperties": False,
+        }
+
+        def apply_patch(patch):
+            if not isinstance(patch, dict) or not patch or not patch.keys() <= editable.keys():
+                raise ValueError("Return only the changed geometry fields of the selected part")
+            return Part.parse(scene.parts[index].data() | patch)
+
         return self._plan(
             prompt,
-            "Edit only the selected 1-based part. Return its complete "
-            "updated object. Preserve all unspecified dimensions, placement and "
-            f"shape. Scene: {context}\n",
-            PART,
-            Part.parse,
+            "Edit only the selected 1-based part. Return only changed geometry fields. "
+            "For a size-only edit return just the complete XYZ size array in metres. "
+            f"Scene: {context}\nUser request: ",
+            patch_schema,
+            apply_patch,
         )
 
     def _plan(self, prompt, context, schema, parse):

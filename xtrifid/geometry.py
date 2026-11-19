@@ -36,7 +36,7 @@ def bridge(lower, upper):
             yield (lower[i], lower[j], upper[j], upper[i])
 
 
-def radial(shape, n):
+def radial(shape, n, outline):
     vertices, faces, smooth = [], [], []
     if shape == "sphere":
         steps = n // 2
@@ -51,6 +51,12 @@ def radial(shape, n):
             (0.34 + 0.16 * cos(tau * i / steps), 0.5 * sin(tau * i / steps))
             for i in range(steps)
         ]
+    elif shape == "lathe":
+        radii, heights = zip(*outline)
+        bottom, top = min(heights), max(heights)
+        profile = [
+            (0.5 * r / max(radii), (z - bottom) / (top - bottom) - 0.5) for r, z in outline
+        ]
     else:
         profile = [(0, -0.5), (0.5, -0.5)]
         if shape == "cylinder":
@@ -63,12 +69,15 @@ def radial(shape, n):
         vertices.extend(
             (radius * cos(tau * j / n), radius * sin(tau * j / n), z) for j in range(count)
         )
-    if shape == "torus":
+    if shape in ("torus", "lathe"):
         rings.append(rings[0])
+        profile.append(profile[0])
     for i, (a, b) in enumerate(zip(rings, rings[1:])):
+        if len(a) == len(b) == 1:
+            continue
         band = list(bridge(a, b))
         faces.extend(band)
-        cap = shape in ("cylinder", "cone") and (i == 0 or (shape == "cylinder" and i == 2))
+        cap = profile[i][1] == profile[i + 1][1]
         smooth.extend([not cap] * len(band))
     return vertices, faces, smooth
 
@@ -99,7 +108,7 @@ def build(part, mode):
         outline = part.outline or ((0, 0), (1, 0), (1, 1), (0, 1))
         vertices, faces, smooth = prism(outline)
     else:
-        vertices, faces, smooth = radial(part.shape, 16 if mode == "game" else 48)
+        vertices, faces, smooth = radial(part.shape, 16 if mode == "game" else 48, part.outline)
     if mode == "game":
         smooth = [s for face, s in zip(faces, smooth) for _ in range(len(face) - 2)]
         faces = list(triangles(faces))

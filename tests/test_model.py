@@ -28,6 +28,8 @@ class MeshTests(unittest.TestCase):
         shapes.append(
             spec("extrusion", outline=[[0, 0], [1, 0], [1, 0.3], [0.3, 0.3], [0.3, 1], [0, 1]])
         )
+        shapes.append(spec("lathe", outline=[[0.5, 0], [1, 0], [1, 1], [0.5, 1]]))
+        shapes.append(spec("lathe", outline=[[0, 0], [0.7, 0], [1, 0.3], [0.6, 1], [0, 1]]))
         for shape in shapes:
             for mode in ("game", "render"):
                 with self.subTest(shape=shape["shape"], mode=mode):
@@ -49,6 +51,16 @@ class MeshTests(unittest.TestCase):
                         self.assertEqual({len(f) for f in mesh.faces}, {3})
                     else:
                         self.assertIn(4, {len(f) for f in mesh.faces})
+
+    def test_hollow_lathe_has_open_bore_and_correct_cap_area(self):
+        p = Part.parse(spec("lathe", outline=[[0.5, 0], [1, 0], [1, 1], [0.5, 1]]))
+        mesh = build(p, "render")
+        self.assertTrue(all(len(f) == 4 for f in mesh.faces))
+        v = mesh.vertices
+        self.assertTrue(all((x / 1) ** 2 + (y / 1.5) ** 2 >= 0.25 - 1e-8 for x, y, z in v))
+        np.testing.assert_allclose(np.ptp(v, axis=0), p.size)
+        with self.assertRaises(ValueError):
+            Part.parse(spec("lathe", outline=[[0, 0.5], [1, 0], [1, 1]]))
 
     def test_silhouette_and_curved_density(self):
         for shape in ("box", "sphere", "cylinder", "torus"):

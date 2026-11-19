@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")"
+: "${DISPLAY:?Start from an X11 or XWayland desktop}"
+model=${XTRIFID_MODEL:-qwen3.5:4b}
+umask 077
+auth=$(mktemp)
+trap 'rm -f "$auth"' EXIT
+cookie=$(xauth nlist "$DISPLAY")
+if [ -z "$cookie" ]; then
+    echo "No Xauthority cookie for $DISPLAY. Run from the desktop session." >&2
+    exit 1
+fi
+# FamilyWild permits the same cookie inside the container hostname.
+printf '%s\n' "$cookie" | sed 's/^..../ffff/' | xauth -f "$auth" nmerge -
+mkdir -p exports
+docker compose up --wait ollama
+if ! docker compose exec -T ollama ollama show "$model" >/dev/null 2>&1; then
+    docker compose exec -T ollama ollama pull "$model"
+fi
+docker compose run --build --rm --no-deps --user "$(id -u):$(id -g)" \
+    -e DISPLAY -e XAUTHORITY=/tmp/xtrifid.xauth \
+    -v "$auth:/tmp/xtrifid.xauth:ro" -v /tmp/.X11-unix:/tmp/.X11-unix:ro studio

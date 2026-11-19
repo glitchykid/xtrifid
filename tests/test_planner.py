@@ -40,27 +40,62 @@ class PlannerTests(unittest.TestCase):
         self.answers.append({"done": True, "message": {"content": json.dumps(data)}})
 
     def test_schema_generation_and_targeted_edit(self):
-        self.answer({"parts": [spec(), spec("sphere") | dict(name="Шар")]})
+        self.answer(
+            {"parts": [spec() | {"support": 0}, spec("sphere") | dict(name="Шар", support=1)]}
+        )
         scene = self.client.generate("Опора с шаром")
         self.assertEqual(len(scene.parts), 2)
         self.assertIn("parts", self.calls[0]["format"]["properties"])
         self.assertFalse(self.calls[0]["stream"])
-        self.answer(spec("sphere") | dict(size=[1, 1, 1], name="Шар"))
+        self.answer({"size": [1, 1, 1]})
         new = self.client.edit("Диаметр 1 метр", scene, 1)
         self.assertIsInstance(new, Part)
         self.assertEqual(new.size, (1, 1, 1))
         self.assertIn("Шар", self.calls[1]["messages"][-1]["content"])
         self.assertEqual(scene.parts[0], Part.parse(spec()))
 
+    def test_planned_profiles_require_outline_in_decode_schema(self):
+        self.answer(
+            {
+                "parts": [
+                    spec("lathe", outline=[[0.5, 0], [1, 0], [1, 1], [0.5, 1]]) | {"support": 0}
+                ]
+            }
+        )
+        self.client.generate("Полая втулка")
+        shapes = self.calls[0]["format"]["properties"]["parts"]["items"]["oneOf"]
+        curved = next(s for s in shapes if "lathe" in s["properties"]["shape"]["enum"])
+        self.assertIn("outline", curved["required"])
+
     def test_invalid_model_data_repaired_once(self):
         self.answer({"parts": []})
-        self.answer({"parts": [spec()]})
+        self.answer({"parts": [spec() | {"support": 0}]})
         self.assertEqual(len(self.client.generate("куб").parts), 1)
         self.assertEqual(len(self.calls), 2)
         self.answer({"parts": []})
         self.answer({"parts": []})
         with self.assertRaises(PlannerError):
             self.client.generate("куб")
+
+    def test_contact_constraints_allow_forward_references_and_rotation(self):
+        self.answer(
+            {
+                "parts": [
+                    spec() | {"name": "Top", "support": 2},
+                    spec() | {"rotation": [90, 0, 0], "support": 0},
+                ]
+            }
+        )
+        scene = self.client.generate("Столешница на повёрнутой опоре")
+        self.assertAlmostEqual(scene.parts[1].center[2], 1.5)
+        self.assertAlmostEqual(scene.parts[0].center[2], 5.0)
+
+    def test_support_cycle_unknown_target_and_missing_support_are_rejected(self):
+        for parts in ([spec() | {"support": 1}], [spec() | {"support": 2}], [spec()]):
+            self.answer({"parts": parts})
+            self.answer({"parts": parts})
+            with self.assertRaises(PlannerError):
+                self.client.generate("Стол")
 
     def test_empty_input_and_truncated_response(self):
         with self.assertRaises(ValueError):
