@@ -129,3 +129,83 @@ class StudioTests(unittest.TestCase):
             self.assertEqual(
                 sum(line.startswith("f ") for line in target.read_text().splitlines()), 12
             )
+
+    def test_selected_profile_ring_appears_in_gl_frame_and_follows_point(self):
+        import numpy as np
+        from OpenGL import GL
+
+        app = Gtk.Application(
+            application_id="io.github.glitchykid.Xtrifid.GuideTest",
+            flags=Gio.ApplicationFlags.NON_UNIQUE,
+        )
+        app.register(None)
+        window = Studio(app)
+        self.addCleanup(window.close)
+        window.present()
+        scene = Scene.parse({"parts": [spec("tube", inner_diameter=1)]})
+        window.install(scene, "render")
+        until(lambda: window.view.drawn)
+        window.profile_section.set_expanded(True)
+        window.point_editor.selector.set_value(3)
+        view = window.view
+
+        def pixels():
+            view.make_current()
+            view.attach_buffers()
+            view.render_mesh(view, view.get_context())
+            w, h = GL.glGetIntegerv(GL.GL_VIEWPORT)[2:]
+            data = GL.glReadPixels(0, 0, int(w), int(h), GL.GL_RGB, GL.GL_UNSIGNED_BYTE)
+            rgb = np.frombuffer(data, dtype=np.uint8).reshape(-1, 3)
+            return int(((rgb[:, 0] > 240) & (rgb[:, 1] > 145) & (rgb[:, 2] < 145)).sum())
+
+        self.assertGreater(pixels(), 30)
+        self.assertEqual(len(view.guide), 49)
+        window.mode.set_selected(0)
+        self.assertEqual(len(view.guide), 17)
+        window.profile_section.set_expanded(False)
+        self.assertEqual(pixels(), 0)
+        self.assertIsNone(view.problem)
+
+    def test_profile_controls_follow_selection_and_commit_only_target_point(self):
+        from threading import Event
+        from unittest.mock import patch
+
+        app = Gtk.Application(
+            application_id="io.github.glitchykid.Xtrifid.PointTest",
+            flags=Gio.ApplicationFlags.NON_UNIQUE,
+        )
+        app.register(None)
+        window = Studio(app)
+        self.addCleanup(window.close)
+        window.present()
+        scene = Scene.parse({"parts": [spec(), spec("sphere") | {"name": "Шар"}]})
+        window.install(scene, "game")
+        self.assertTrue(window.profile_section.get_visible())
+        window.select(1)
+        self.assertFalse(window.profile_section.get_visible())
+        window.select(0)
+        window.profile_section.set_expanded(True)
+        arrived, release = Event(), Event()
+        self.addCleanup(release.set)
+
+        def edit(prompt, source, index, point):
+            from xtrifid.profile import move_profile_point, profile_points
+
+            arrived.set()
+            release.wait(5)
+            x, y = profile_points(source.parts[index])[point]
+            return move_profile_point(source.parts[index], point, (x + 0.05, y))
+
+        with patch.object(window.planner, "edit_point", side_effect=edit) as planner:
+            window.request_point(0, "Смести точку по X на 5 см")
+            until(arrived.is_set)
+            window.select(1)
+            self.assertEqual(window.selected, 0)
+            self.assertFalse(window.inspector.get_sensitive())
+            release.set()
+            until(lambda: not window.busy)
+            planner.assert_called_once_with("Смести точку по X на 5 см", scene, 0, 0)
+        self.assertIs(window.doc.scene.parts[1], scene.parts[1])
+        self.assertEqual(window.doc.scene.parts[0].shape, "extrusion")
+        window.undo()
+        self.assertEqual(window.doc.scene, scene)

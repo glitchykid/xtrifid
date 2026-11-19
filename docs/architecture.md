@@ -14,12 +14,20 @@ The allowed primitives include tubes with a dimensioned bore, extruded simple po
 4. The GTK OpenGL viewport and OBJ writer consume the same meshes. The viewport triangulates quads for display and uses the original polygon boundaries for its wire overlay. Display lighting stays in the viewport.
 5. The versioned JSON project restores editable geometry and mode. Temporary files and atomic replacement protect a saved file if writing fails.
 
+## Local profile edits
+
+The profile editor shares the same cross section and rotation matrix used by the mesh generator. A control point identifies a vertical edge of an extruded polygon, or a ring or pole of a turned surface. The highlighted polyline comes from the actual mesh for the active resolution. The canvas keeps drag previews local and commits one undoable edit on release.
+
+For a text edit, Ollama identifies the axes, the unit (mm, cm or m) and whether the requested coordinate is absolute or relative. The client converts units and computes the new coordinates. Axes omitted by the user retain their exact values.
+
+Edits use local metres. After a change, the geometry module validates the contour, recomputes its dimensions and rotates the shift of the bounding-box centre into world space. This keeps other control points anchored, including on rotated and elliptical parts. The first edit of a primitive uses the existing extrusion or lathe representation in the version 1 project format. A no-op preserves the original primitive. Self-intersections, inverted winding, invalid axis contact and out-of-range dimensions are rejected.
+
 ## Runtime
 
 | Component | Verified target |
 | --- | --- |
 | Distribution | Debian 13 trixie, pinned base image |
-| GUI and preview | GTK 4.18.6, PyGObject 3.50.0, OpenGL 3.3 core, PyOpenGL 3.1.9 |
+| GUI and preview | GTK 4.18.6, PyGObject and its Cairo integration 3.50.0, OpenGL 3.3 core, PyOpenGL 3.1.9 |
 | Geometry and storage | Python 3.13.5 and NumPy 2.2.4 |
 | Inference | Ollama 0.40.16, Qwen 3.5 4B (`d8b0f5e9760c` in the tested runtime) |
 | Checks | Ruff 0.17.6, unittest, Xvfb and Mesa |
@@ -44,4 +52,10 @@ For an end-to-end CPU check, start Ollama and load the weights, then run the rea
 docker compose up -d --wait ollama
 docker compose exec -T ollama ollama pull qwen3.5:4b
 docker compose run --rm --no-deps -e PYTHONPATH=/app tests xvfb-run -a dbus-run-session -- python3 tests/live_studio.py
+```
+
+To verify a point edit independently, load the same Ollama service and run the following command. It opens a version 1 tube in GTK, selects the upper inner ring, asks Qwen to increase its radius by 5 mm, measures all four rings of the exported meshes in both modes, reloads the project and checks undo.
+
+```sh
+docker compose run --rm --no-deps -e PYTHONPATH=/app tests xvfb-run -a dbus-run-session -- python3 tests/live_profile.py
 ```

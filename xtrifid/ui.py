@@ -7,6 +7,8 @@ from xtrifid.gtk import Gio, GLib, Gtk, Pango
 from .geometry import build
 from .model import MAX_LENGTH, MIN_SIZE, MODES, Document, Part
 from .planner import MAX_PROMPT, Planner, PlannerError
+from .profile import PROFILE_SHAPES, profile_guide
+from .profile_editor import ProfileEditor
 from .storage import export_obj, load_project, save_project
 from .viewport import Viewport
 
@@ -108,6 +110,13 @@ class Studio(Gtk.ApplicationWindow):
         side.append(self.part_list)
         self.inspector = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=7)
         side.append(self.inspector)
+        self.profile_section = Gtk.Expander(label="Контур детали")
+        self.point_editor = ProfileEditor(
+            self.apply_point, self.notify_status, self.request_point, self.update_guide
+        )
+        self.profile_section.set_child(self.point_editor)
+        self.profile_section.connect("notify::expanded", lambda *_: self.update_guide())
+        self.inspector.append(self.profile_section)
         self.fields = {}
         self.field_text = {}
         for attr, title, lo, hi, digits, step in (
@@ -201,7 +210,7 @@ class Studio(Gtk.ApplicationWindow):
         self.spinner.set_visible(self.busy)
         self.spinner.set_spinning(self.busy)
 
-    def refresh(self):
+    def refresh(self, *, reset_point=False):
         self.syncing = True
         scene = self.doc.scene
         parts = scene.parts if scene else ()
@@ -212,7 +221,12 @@ class Studio(Gtk.ApplicationWindow):
         )
         meshes = [build(p, self.doc.mode) for p in parts]
         self.view.set_meshes(meshes)
-        self.select(self.selected)
+        if parts:
+            self.select(self.selected, reset_point=reset_point)
+        else:
+            self.point_editor.set_part(None)
+            self.profile_section.set_visible(False)
+            self.view.set_guide()
         self.stats.set_text(
             f"Деталей: {len(parts)}   ·   Граней: {sum(len(m.faces) for m in meshes):,}".replace(
                 ",", " "
@@ -222,12 +236,15 @@ class Studio(Gtk.ApplicationWindow):
         self.syncing = False
         self.controls()
 
-    def select(self, index):
-        if self.busy or not self.doc.scene or index >= len(self.doc.scene.parts):
+    def select(self, index, *, reset_point=False):
+        if self.busy or not self.doc.scene or not 0 <= index < len(self.doc.scene.parts):
             return
+        reset_point = reset_point or self.selected != index
         self.selected = index
         self.part_list.set_selected(index)
         part = self.doc.scene.parts[index]
+        self.profile_section.set_visible(part.shape in PROFILE_SHAPES)
+        self.point_editor.set_part(part, reset_selection=reset_point)
         for attr, fields in self.fields.items():
             for spin, value in zip(fields, getattr(part, attr)):
                 spin.set_value(value)
@@ -237,7 +254,17 @@ class Studio(Gtk.ApplicationWindow):
             self.bore.set_value(part.inner_diameter)
             self.field_text[self.bore] = self.bore.get_text()
         self.view.selected = index
-        self.view.queue_render()
+        self.update_guide()
+
+    def update_guide(self):
+        if self.profile_section.get_expanded() and self.point_editor.part:
+            self.view.set_guide(
+                profile_guide(
+                    self.point_editor.part, self.point_editor.selected_index, self.doc.mode
+                )
+            )
+        else:
+            self.view.set_guide()
 
     def change_selection(self, widget, _):
         if not self.syncing:
@@ -246,7 +273,7 @@ class Studio(Gtk.ApplicationWindow):
     def install(self, scene, mode):
         self.doc.apply(scene, mode)
         self.selected = 0
-        self.refresh()
+        self.refresh(reset_point=True)
         self.view.reset_camera()
 
     def change_mode(self, widget, _):
@@ -288,21 +315,67 @@ class Studio(Gtk.ApplicationWindow):
         self.refresh()
         self.notify_status("Действие отменено")
 
-    def request(self, edit):
-        if self.busy or (edit and not self.doc.scene):
+    def apply_point(self, part):
+        if self.busy or not self.doc.scene:
             return
-        prompt = (self.adjust if edit else self.prompt).get_text().strip()
+        self.doc.replace(self.selected, part)
+        self.refresh()
+        self.notify_status(f"Точка {self.point_editor.selected_index + 1} · {part.name}")
+
+    def request_point(self, point_index, prompt):
+        if not self.doc.scene:
+            return
+        scene, index = self.doc.scene, self.selected
+        self.run_planner(
+            prompt,
+            lambda text: self.planner.edit_point(text, scene, index, point_index),
+            self.apply_point,
+            f"Ollama рассчитывает положение точки {point_index + 1}…",
+        )
+
+    def request(self, edit):
+        if edit and not self.doc.scene:
+            return
+        if edit:
+            scene, index = self.doc.scene, self.selected
+
+            def apply(part):
+                self.doc.replace(index, part)
+                self.refresh()
+                self.notify_status(f"Деталь изменена · {part.name}")
+
+            self.run_planner(
+                self.adjust.get_text(),
+                lambda text: self.planner.edit(text, scene, index),
+                apply,
+                "Ollama рассчитывает форму выбранной детали…",
+            )
+        else:
+
+            def install(scene):
+                self.install(scene, self.doc.mode)
+                self.notify_status(
+                    "Модель готова. Выберите деталь в окне просмотра или в списке."
+                )
+
+            self.run_planner(
+                self.prompt.get_text(),
+                self.planner.generate,
+                install,
+                "Ollama строит модель по описанию…",
+            )
+
+    def run_planner(self, prompt, compute, apply, progress):
+        if self.busy:
+            return
+        prompt = prompt.strip()
         if not prompt:
             self.notify_status("Введите текст запроса")
             return
-        scene, index = self.doc.scene, self.selected
+        scene = self.doc.scene
         self.busy = True
         self.controls()
-        self.notify_status(
-            "Ollama рассчитывает форму выбранной детали…"
-            if edit
-            else "Ollama строит модель по описанию…"
-        )
+        self.notify_status(progress)
 
         def finish(value, error):
             if self.closed:
@@ -310,25 +383,16 @@ class Studio(Gtk.ApplicationWindow):
             self.busy = False
             if error:
                 self.notify_status(error)
-                self.controls()
-            elif edit:
-                self.doc.replace(index, value)
-                self.refresh()
-                self.notify_status(f"Деталь изменена · {value.name}")
+            elif self.doc.scene is not scene:
+                self.notify_status("Во время запроса сцена изменилась. Повторите правку.")
             else:
-                self.install(value, self.doc.mode)
-                self.notify_status(
-                    "Модель готова. Выберите деталь в окне просмотра или в списке."
-                )
+                apply(value)
+            self.controls()
             return False
 
         def work():
             try:
-                value = (
-                    self.planner.edit(prompt, scene, index)
-                    if edit
-                    else self.planner.generate(prompt)
-                )
+                value = compute(prompt)
             except (PlannerError, ValueError) as exc:
                 GLib.idle_add(finish, None, str(exc))
             else:

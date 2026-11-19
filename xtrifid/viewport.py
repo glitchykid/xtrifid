@@ -27,6 +27,7 @@ uniform int selected;
 uniform int passKind;
 out vec4 color;
 void main(){
+    if(passKind==3){color=vec4(1.,.80,.42,1);return;}
     if(passKind==2){color=vec4(.18,.21,.26,1);return;}
     if(passKind==1){color=vec4(.13,.17,.22,1);return;}
     float light=.55+.45*max(dot(normalize(n),normalize(vec3(-.4,-.6,1.))),0.);
@@ -80,6 +81,9 @@ class Viewport(Gtk.GLArea):
         self.problem = None
         self.drawn = False
         self.program = None
+        self.guide = np.empty((0, 7), dtype=np.float32)
+        self.guide_capacity = 0
+        self.guide_dirty = True
         self.set_meshes([])
         self.reset_camera()
         self.connect("render", self.render_mesh)
@@ -125,6 +129,16 @@ class Viewport(Gtk.GLArea):
 
     def reset_camera(self):
         self.yaw, self.pitch, self.zoom = 0.65, 0.42, 1.0
+        self.queue_render()
+
+    def set_guide(self, points=()):
+        self.guide = np.zeros((len(points), 7), dtype=np.float32)
+        if len(points):
+            self.guide[:, :3] = (np.asarray(points) - self.center) / self.radius
+        if len(points) > self.guide_capacity:
+            self.guide_capacity = len(points)
+            self.dirty = True
+        self.guide_dirty = True
         self.queue_render()
 
     def matrix(self):
@@ -230,9 +244,20 @@ class Viewport(Gtk.GLArea):
             if self.dirty:
                 GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
                 GL.glBufferData(
-                    GL.GL_ARRAY_BUFFER, self.buffer.nbytes, self.buffer, GL.GL_STATIC_DRAW
+                    GL.GL_ARRAY_BUFFER,
+                    self.buffer.nbytes + self.guide_capacity * self.buffer.strides[0],
+                    None,
+                    GL.GL_DYNAMIC_DRAW,
                 )
+                GL.glBufferSubData(GL.GL_ARRAY_BUFFER, 0, self.buffer.nbytes, self.buffer)
                 self.dirty = False
+                self.guide_dirty = True
+            if self.guide_dirty and len(self.guide):
+                GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+                GL.glBufferSubData(
+                    GL.GL_ARRAY_BUFFER, self.buffer.nbytes, self.guide.nbytes, self.guide
+                )
+                self.guide_dirty = False
             matrix = np.eye(4, dtype=np.float32)
             matrix[:3, :3] = self.matrix()
             GL.glUseProgram(self.program)
@@ -252,6 +277,14 @@ class Viewport(Gtk.GLArea):
             if self.wire:
                 GL.glUniform1i(self.uniforms["passKind"], 1)
                 GL.glDrawArrays(GL.GL_LINES, faces, edges)
+            if len(self.guide):
+                GL.glDepthFunc(GL.GL_LEQUAL)
+                GL.glUniform1i(self.uniforms["passKind"], 3)
+                GL.glDrawArrays(GL.GL_LINE_STRIP, len(self.buffer), len(self.guide))
+                if len(self.guide) <= 2:
+                    GL.glPointSize(6)
+                    GL.glDrawArrays(GL.GL_POINTS, len(self.buffer), len(self.guide))
+                GL.glDepthFunc(GL.GL_LESS)
             self.drawn = True
         except Exception as exc:
             if self.problem is None:

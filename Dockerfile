@@ -1,7 +1,7 @@
 FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS base
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates fonts-dejavu-core gir1.2-gtk-4.0 libgl1-mesa-dri \
-    python3-gi python3-numpy python3-opengl && rm -rf /var/lib/apt/lists/*
+    python3-gi python3-gi-cairo python3-numpy python3-opengl && rm -rf /var/lib/apt/lists/*
 RUN useradd --no-create-home --home-dir /tmp --uid 1000 studio
 WORKDIR /app
 ENV HOME=/tmp PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1

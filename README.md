@@ -23,6 +23,12 @@ The launcher starts Ollama, downloads `qwen3.5:4b` once and opens the studio. La
 3. Enter a local change such as “Change only the seat thickness to 8 cm”, then press **Изменить деталь**. For an exact transform, enter XYZ dimensions, centre or rotation and press **Применить значения**. **Отменить действие** restores the previous state.
 4. **Сохранить** writes an editable `.xtri` project. **Открыть** restores it. **Экспорт OBJ** writes the current mesh. Choose `/exports` in the file dialog to keep files in the host’s `./exports` directory.
 
+## Edit a corner or rim
+
+Select a part and expand **Контур детали**. Click a point on the section drawing or choose its number with **Вершина**. The 3D view highlights the corresponding edge, circular rim or pole. Drag the point, enter its two local coordinates in metres and click **Применить координаты**, or enter a text instruction such as “Increase the radius of this point by 5 mm and keep its height.”
+
+For a box or extrusion, the point controls a vertical edge in the local XY plane. For a cylinder, cone, tube or revolved profile, it controls a ring or pole by radius and Z. The first edit converts the primitive into an editable extrusion or revolved profile. The other control points retain their world positions. The part centre can move as its bounds change. Undo restores the previous shape. Spheres and tori support whole-part editing. Existing XTRI projects open directly.
+
 ## Geometry profiles
 
 | Profile | Mesh |
