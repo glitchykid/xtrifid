@@ -29,6 +29,45 @@ CANOPY = {
 
 
 class CompositeTests(unittest.TestCase):
+    def test_repeated_invalid_object_hints_fall_back_to_the_original_request(self):
+        prompt = "Окатанный камень с неровной поверхностью"
+        invalid = SUBJECT | {"components": [COVER | {"support": 0}, SUPPORT]}
+        stone = COLUMN | {"name": "Камень", "shape": "sphere", "support": 0}
+        with patch.object(
+            Planner,
+            "_chat",
+            side_effect=map(json.dumps, [invalid, invalid, {"parts": [stone]}]),
+        ) as chat:
+            scene = Planner().generate(prompt, "low")
+        self.assertEqual([p.name for p in scene.parts], ["Камень"])
+        self.assertIn(prompt, chat.call_args.args[0][-1]["content"])
+        self.assertNotIn("Навес", chat.call_args.args[0][-1]["content"])
+        self.assertEqual(chat.call_count, 3)
+
+    def test_final_geometry_remains_strict_after_an_object_hint_fallback(self):
+        invalid = SUBJECT | {"components": [COVER | {"support": 0}, SUPPORT]}
+        bad = {"parts": [COLUMN | {"support": 1}]}
+        with (
+            patch.object(
+                Planner, "_chat", side_effect=map(json.dumps, [invalid, invalid, bad, bad])
+            ) as chat,
+            self.assertRaises(PlannerError),
+        ):
+            Planner().generate("Деталь на подставке")
+        self.assertEqual(chat.call_count, 4)
+
+    def test_named_supports_can_refer_to_an_item_listed_later(self):
+        named = SUBJECT | {
+            "components": [COVER | {"support": "Колонна"}, SUPPORT | {"support": "@floor"}]
+        }
+        with patch.object(
+            Planner, "_chat", side_effect=map(json.dumps, [named, {"parts": [CANOPY, COLUMN]}])
+        ) as chat:
+            scene = Planner().generate("Навес с опорной колонной")
+        self.assertEqual([p.name for p in scene.parts], ["Навес", "Колонна"])
+        self.assertGreater(scene.parts[0].center[2], scene.parts[1].center[2])
+        self.assertEqual(chat.call_count, 2)
+
     def test_named_strictly_monotonic_outer_meridian_ends_in_two_planar_caps(self):
         from xtrifid.assembly import assemble
 

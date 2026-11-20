@@ -15,7 +15,7 @@ COMPONENTS_SCHEMA = {
         "additionalProperties": False,
         "properties": {
             "name": {"type": "string", "minLength": 1, "maxLength": 80},
-            "support": {"type": "integer", "minimum": -1, "maximum": MAX_PARTS},
+            "support": {"type": "string", "minLength": 1, "maxLength": 80},
             "width": {"type": "string", "enum": list(WIDTH_RELATIONS)},
             "joint": {"type": "string", "enum": list(JOINTS)},
         },
@@ -28,12 +28,31 @@ def read_components(raw):
     if not isinstance(raw, list) or len(raw) > MAX_PARTS:
         raise ValueError("List the named components of the requested object")
     raw = list(raw)
-    names = set()
+    names = {"@floor": 0, "@free": -1}
     for i, role in enumerate(raw, 1):
         if not isinstance(role, dict) or role.keys() != {"name", "support", "width", "joint"}:
             raise ValueError("Each component needs name, support, width and joint")
         name = role["name"]
+        if (
+            not isinstance(name, str)
+            or not name.strip()
+            or name != name.strip()
+            or not name.isprintable()
+            or len(name) > 80
+            or name.casefold() in names
+        ):
+            raise ValueError("Give every component a unique readable name")
+        names[name.casefold()] = i
+    for i, role in enumerate(raw, 1):
+        name = role["name"]
         support = role["support"]
+        if isinstance(support, str):
+            if support.casefold() not in names:
+                raise ValueError(
+                    f"Choose the exact supporting component name for {name}, or @floor or @free"
+                )
+            support = names[support.casefold()]
+            raw[i - 1] = role | {"support": support}
         if (
             type(support) is int
             and support == i
@@ -51,15 +70,6 @@ def read_components(raw):
                 support = 3 - i
                 raw[i - 1] = role | {"support": support}
         if (
-            not isinstance(name, str)
-            or not name.strip()
-            or name != name.strip()
-            or not name.isprintable()
-            or len(name) > 80
-            or name in names
-        ):
-            raise ValueError("Give every component a unique readable name")
-        if (
             type(support) is not int
             or not -1 <= support <= len(raw)
             or support == i
@@ -70,10 +80,9 @@ def read_components(raw):
         if support <= 0 and (role["width"] != "unspecified" or role["joint"] == "joined"):
             raise ValueError(
                 f"Component {i} ({name}) has a width or joint relative to a missing support. "
-                "Put the supporting piece on the floor with support=0, width=unspecified. "
-                "Set the UPPER piece support to the 1-based index of the piece it sits on."
+                "Use @floor and width=unspecified for the grounded piece. "
+                "Set the upper piece support to the exact name of the piece beneath it."
             )
-        names.add(name)
     for i in range(len(raw)):
         chain = set()
         while i >= 0:

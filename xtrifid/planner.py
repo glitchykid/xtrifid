@@ -272,16 +272,16 @@ Keep each identifiable role, including the load-bearing part and the part it car
 Use their short, distinct names in the user's language. Preserve a stated count by listing
 the instances separately, each with a unique name. Omit excluded items. Do not
 list surface ends or empty space as separate pieces. For an undivided shell use [].
-For each component, support is 0 for the floor, -1 for free positioning, otherwise
-the 1-based index of the piece directly beneath it. Compare its horizontal width to that
+For each component, use the exact name of the piece directly beneath it as support.
+Use "@floor" for the floor and "@free" for free positioning. Compare its horizontal width to that
 support: wider, narrower, equal, or unspecified. Use the requested proportions and
 the ordinary shape of the named object. A broad piece over a column is wider even
 if the column is itself thick. Mark the joint "joined" for a continuous or attached
 form, "resting" for stacked pieces. For a multi-component object choose form "general".
 List supporting pieces first. Example for a thin aerial attached to a box:
-[{"name":"Box","support":0,"width":"unspecified","joint":"resting"},
-{"name":"Aerial","support":1,"width":"narrower","joint":"joined"}].
-Only an item that rests on the floor gets support=0. For a side-mounted part use -1.
+[{"name":"Box","support":"@floor","width":"unspecified","joint":"resting"},
+{"name":"Aerial","support":"Box","width":"narrower","joint":"joined"}].
+For "@floor" and "@free" use width "unspecified" and joint "resting".
 Choose form "varying_sections" for a single continuous sculpted solid whose cross-sections
 taper asymmetrically or shift toward one side. Such a solid cannot be revolved about a
 fixed axis. Extract its bottom and top end independently: flat for a planar base or
@@ -360,9 +360,16 @@ def checked_prompt(prompt):
     return prompt.strip()
 
 
+class _InvalidObjectHints(ValueError):
+    """The subject was recognized, but its optional component plan is unusable."""
+
+
 def read_subject(data, detail):
     if isinstance(data, dict) and data.get("subject") == "object":
-        roles = read_components(data.get("components", []))
+        try:
+            roles = read_components(data.get("components", []))
+        except ValueError as exc:
+            raise _InvalidObjectHints(str(exc)) from exc
         data = {k: v for k, v in data.items() if k != "components"}
         if len(roles) > 1:
             return None, [], {"components": roles}
@@ -476,17 +483,22 @@ class Planner:
         spec = simple_character(prompt)
         if spec is not None:
             return build_character(spec, detail)
-        figure, construction = None, None
+        figure, accessories, construction = None, [], None
         if prompt.casefold().rstrip(".!?") not in PRIMITIVE_NAMES:
-            figure, accessories, construction = self._plan(
-                prompt,
-                "",
-                SUBJECT,
-                lambda data: read_subject(data, detail),
-                instructions=SUBJECT_INSTRUCTIONS,
-                num_ctx=2048,
-                num_predict=max(192, min(768, 2 * len(prompt))),
-            )
+            try:
+                figure, accessories, construction = self._plan(
+                    prompt,
+                    "",
+                    SUBJECT,
+                    lambda data: read_subject(data, detail),
+                    instructions=SUBJECT_INSTRUCTIONS,
+                    num_ctx=2048,
+                    num_predict=max(192, min(768, 2 * len(prompt))),
+                )
+            except PlannerError as exc:
+                # After the repair attempt, an identified object can still use direct geometry.
+                if not isinstance(exc.__cause__, _InvalidObjectHints):
+                    raise
             if figure is not None and not accessories:
                 return figure
         if figure is None:
