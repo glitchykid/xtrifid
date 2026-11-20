@@ -302,6 +302,8 @@ def uv_layout(mesh, part):
     # Local import avoids making the model/texture specification depend on meshing.
     from .geometry import rotation_matrix
 
+    if part.shape == "surface" and part.surface.uv is not None:
+        return part.surface.uv_layout(mesh.faces)
     vertices = (mesh.vertices - part.center) @ rotation_matrix(part.rotation)
     if part.shape in ("lathe", "cone", "sphere", "torus", "cylinder", "tube"):
         return _radial_uv(mesh, part, vertices)

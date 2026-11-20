@@ -113,9 +113,14 @@ class Studio(Gtk.ApplicationWindow):
         self.opener = button("Открыть", lambda: self.file_dialog("open"))
         self.saver = button("Сохранить", lambda: self.file_dialog("save"))
         self.exporter = button("Экспорт OBJ", lambda: self.file_dialog("obj"))
+        self.glb_exporter = button("Экспорт GLB", lambda: self.file_dialog("glb"))
+        self.glb_exporter.set_tooltip_text(
+            "Game Ready · сетка и карты материалов в одном файле"
+        )
         for widget in (self.opener, self.saver):
             header.pack_start(widget)
         header.pack_end(self.exporter)
+        header.pack_end(self.glb_exporter)
         self.set_titlebar(header)
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.set_child(root)
@@ -320,6 +325,7 @@ class Studio(Gtk.ApplicationWindow):
         self.generate.set_sensitive(not self.busy and self.detail.get_selected() > 0)
         for w in (self.saver, self.exporter, self.inspector, self.part_list, self.focus_part):
             w.set_sensitive(scene and not self.busy)
+        self.glb_exporter.set_sensitive(scene and self.doc.mode == "game" and not self.busy)
         self.back.set_sensitive(bool(self.doc.history) and not self.busy)
         self.spinner.set_visible(self.busy)
         self.spinner.set_spinning(self.busy)
@@ -395,7 +401,7 @@ class Studio(Gtk.ApplicationWindow):
         if part.inner_diameter is not None:
             self.bore.set_value(part.inner_diameter)
             self.field_text[self.bore] = self.bore.get_text()
-        self.material.set_part(part)
+        self.material.set_part(part, self.doc.mode)
         self.mask_editor.set_part(part)
         self.sculpt_editor.set_part(part, reset_point)
         colliders = [
@@ -509,9 +515,18 @@ class Studio(Gtk.ApplicationWindow):
             return
         if not replace_selected and len(scene.parts) >= MAX_PARTS:
             raise ValueError("Достигнут предел числа деталей сцены")
-        part = baked_part(name, mesh)
+        source = scene.parts[self.selected]
+        chart = None
+        if replace_selected and source.texture is not None:
+            from .textures import uv_layout
+
+            rest = self.meshes[self.selected]
+            if rest.faces != mesh.faces or len(rest.vertices) != len(mesh.vertices):
+                raise ValueError("Сетка кадра не совпадает с исходной UV-развёрткой")
+            chart = uv_layout(rest, source)
+        part = baked_part(name, mesh, uv_chart=chart)
         if replace_selected:
-            part = replace(part, texture=scene.parts[self.selected].texture)
+            part = replace(part, texture=source.texture)
             self.replace_part(part)
         else:
             self.present_scene(replace(scene, parts=(*scene.parts, part)), self.doc.mode)
@@ -524,12 +539,14 @@ class Studio(Gtk.ApplicationWindow):
             self.replace_part(replace(part, texture=texture))
             self.notify_status("Текстура применена" if texture else "Текстура снята")
 
-    def request_texture(self, prompt, seed, resolution):
+    def request_texture(self, prompt, seed, resolution, *, physical=False):
         self.run_planner(
             prompt,
-            lambda text: text_to_texture(self.planner, text, seed, resolution),
+            lambda text: text_to_texture(
+                self.planner, text, seed, resolution, physical=physical
+            ),
             self.apply_texture,
-            "ИИ подбирает узор и палитру…",
+            "ИИ подбирает материал и рисунок…",
         )
 
     def choose_references(self):
@@ -825,17 +842,25 @@ class Studio(Gtk.ApplicationWindow):
 
     def file_dialog(self, action):
         opening = action == "open"
-        project = action != "obj"
-        ext = "xtri" if project else "obj"
-        dialog = Gtk.FileDialog(
-            title={"open": "Открыть проект", "save": "Сохранить проект", "obj": "Экспорт OBJ"}[
-                action
-            ]
-        )
+        project = action in ("open", "save")
+        ext = "xtri" if project else action
+        title = {
+            "open": "Открыть проект",
+            "save": "Сохранить проект",
+            "obj": "Экспорт OBJ",
+            "glb": "Экспорт GLB",
+        }[action]
+        dialog = Gtk.FileDialog(title=title)
         folder = os.environ.get("XTRIFID_FILES") or self.file_folder or str(Path.home())
         dialog.set_initial_folder(Gio.File.new_for_path(folder))
         file_filter = Gtk.FileFilter()
-        file_filter.set_name("Xtrifid (*.xtri)" if project else "Wavefront OBJ (*.obj)")
+        file_filter.set_name(
+            {
+                "xtri": "Xtrifid (*.xtri)",
+                "obj": "Wavefront OBJ (*.obj)",
+                "glb": "glTF 2.0 (*.glb)",
+            }[ext]
+        )
         file_filter.add_pattern("*." + ext)
         filters = Gio.ListStore.new(Gtk.FileFilter)
         filters.append(file_filter)
@@ -853,12 +878,20 @@ class Studio(Gtk.ApplicationWindow):
                 path = file.get_path()
                 if not path:
                     raise ValueError("Выберите локальный файл")
+                self.file_folder = str(Path(path).parent)
                 if project:
                     save_project(path, self.doc.scene, self.doc.mode)
+                    self.notify_status(f"Файл записан · {path}")
                 else:
-                    export_obj(path, self.doc.scene, self.doc.mode)
-                self.file_folder = str(Path(path).parent)
-                self.notify_status(f"Файл записан · {path}")
+                    from .gltf import export_glb
+
+                    export = export_glb if action == "glb" else export_obj
+                    scene, mode = self.doc.scene, self.doc.mode
+                    self.run_task(
+                        lambda: export(path, scene, mode),
+                        lambda _: self.notify_status(f"Файл записан · {path}"),
+                        f"Экспорт {ext.upper()}…",
+                    )
             except GLib.Error as exc:
                 if not exc.matches(Gtk.dialog_error_quark(), Gtk.DialogError.DISMISSED):
                     self.notify_status(exc.message)

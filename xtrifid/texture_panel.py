@@ -1,9 +1,18 @@
-"""GTK controls for a selected part's procedural diffuse colour map."""
+"""GTK controls for a selected part's procedural surface."""
 
+from dataclasses import replace
 from secrets import randbelow
 
 from .gtk import Gdk, Gtk
-from .textures import MOTIFS, PALETTES, RESOLUTIONS, TextureSpec, texture_from_prompt
+from .textures import (
+    MOTIFS,
+    PALETTES,
+    RESOLUTIONS,
+    PBRMaterial,
+    TextureSpec,
+    pbr_preset,
+    texture_from_prompt,
+)
 
 
 class TexturePanel(Gtk.Expander):
@@ -48,9 +57,9 @@ class TexturePanel(Gtk.Expander):
             placeholder_text="Например, синяя ткань", max_length=500, hexpand=True
         )
         self.prompt.update_property([Gtk.AccessibleProperty.LABEL], ["Описание текстуры"])
-        grid.attach(self.prompt, 0, 6, 2, 1)
+        grid.attach(self.prompt, 0, 8, 2, 1)
         buttons = Gtk.Box(spacing=4)
-        grid.attach(buttons, 0, 7, 2, 1)
+        grid.attach(buttons, 0, 9, 2, 1)
         self.apply_button = Gtk.Button(label="Назначить")
         self.apply_button.connect("clicked", lambda *_: self.commit())
         buttons.append(self.apply_button)
@@ -63,16 +72,38 @@ class TexturePanel(Gtk.Expander):
         self.ai_button = Gtk.Button(label="Создать по описанию (ИИ)")
         self.ai_button.set_visible(on_ai is not None)
         self.ai_button.connect("clicked", lambda *_: self.request_ai())
-        grid.attach(self.ai_button, 0, 8, 2, 1)
+        grid.attach(self.ai_button, 0, 10, 2, 1)
+        self.physical = Gtk.CheckButton(label="PBR-материал")
+        self.physical.set_tooltip_text("Добавить карты нормалей, шероховатости и металличности")
+        grid.attach(self.physical, 0, 6, 2, 1)
+        self.pbr_grid = Gtk.Grid(row_spacing=3, column_spacing=5)
+        grid.attach(self.pbr_grid, 0, 7, 2, 1)
+        self.roughness, self.metallic, self.normal_strength = (
+            Gtk.SpinButton.new_with_range(0, upper, 0.01) for upper in (1, 1, 2)
+        )
+        for row, (name, spin, tip) in enumerate(
+            (
+                ("Шероховатость", self.roughness, "0 — полированная поверхность, 1 — матовая"),
+                ("Металличность", self.metallic, "0 — диэлектрик, 1 — голый металл"),
+                (
+                    "Сила рельефа",
+                    self.normal_strength,
+                    "0 — плоская карта нормалей, 1 — исходный рельеф",
+                ),
+            )
+        ):
+            spin.set_digits(2)
+            spin.set_numeric(True)
+            spin.set_tooltip_text(tip)
+            name_label = Gtk.Label(label=name, xalign=0, mnemonic_widget=spin)
+            spin.update_property([Gtk.AccessibleProperty.LABEL], [name])
+            self.pbr_grid.attach(name_label, 0, row, 1, 1)
+            self.pbr_grid.attach(spin, 1, row, 1, 1)
+        self.physical.connect("toggled", self._show_physical)
         self.prompt.connect(
             "activate", lambda *_: self.request_ai() if self.on_ai else self.commit()
         )
-        self.material.connect(
-            "notify::selected",
-            lambda *_: self._colors(
-                (*PALETTES[self._material()], PALETTES[self._material()][0])
-            ),
-        )
+        self.material.connect("notify::selected", self._preset)
         self.set_part(None)
 
     def _material(self):
@@ -84,7 +115,22 @@ class TexturePanel(Gtk.Expander):
             color.parse(value)
             button.set_rgba(color)
 
-    def set_part(self, part):
+    def _preset(self, *_):
+        material = self._material()
+        self._colors((*PALETTES[material], PALETTES[material][0]))
+        self._set_physical_values(pbr_preset(material))
+
+    def _set_physical_values(self, material):
+        self.roughness.set_value(material.roughness)
+        self.metallic.set_value(material.metallic)
+        self.normal_strength.set_value(material.normal_strength)
+
+    def _show_physical(self, *_):
+        active = self.physical.get_active()
+        self.pbr_grid.set_visible(active)
+        self.pbr_grid.set_sensitive(active)
+
+    def set_part(self, part, mode="render"):
         self.set_sensitive(part is not None)
         self.prompt.set_text("")
         applied = part.texture if part else None
@@ -96,6 +142,9 @@ class TexturePanel(Gtk.Expander):
         self.seed.set_value(spec.seed)
         self.scale.set_value(spec.scale)
         self.resolution.set_selected(RESOLUTIONS.index(spec.resolution))
+        self._set_physical_values(spec.pbr or pbr_preset(spec.material))
+        self.physical.set_active(spec.pbr is not None if applied else mode == "game")
+        self._show_physical()
 
     def commit(self):
         try:
@@ -127,6 +176,18 @@ class TexturePanel(Gtk.Expander):
                     MOTIFS[self.motif.get_selected()],
                     palette[2],
                 )
+            if self.physical.get_active():
+                selected_defaults = pbr_preset(self._material())
+                recipe_defaults = pbr_preset(spec.material)
+                values = []
+                for name in ("roughness", "metallic", "normal_strength"):
+                    spin = getattr(self, name)
+                    spin.update()
+                    value = spin.get_value()
+                    if prompt and abs(value - getattr(selected_defaults, name)) < 1e-6:
+                        value = getattr(recipe_defaults, name)
+                    values.append(value)
+                spec = replace(spec, pbr=PBRMaterial(*values))
             self.apply(spec)
         except ValueError as exc:
             self.status(str(exc))
@@ -144,5 +205,8 @@ class TexturePanel(Gtk.Expander):
         self.seed.update()
         if self.on_ai:
             self.on_ai(
-                text, self.seed.get_value_as_int(), RESOLUTIONS[self.resolution.get_selected()]
+                text,
+                self.seed.get_value_as_int(),
+                RESOLUTIONS[self.resolution.get_selected()],
+                physical=self.physical.get_active(),
             )

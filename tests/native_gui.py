@@ -2,8 +2,8 @@
 
 Usage: python3 tests/native_gui.py /absolute/path/to/xtrifid-linux-x86_64 [--generate]
 The external driver uses xvfb-run, dbus-run-session, python3-pyatspi, python3-xlib
-and python3-pil. The default run covers the reference image chooser, textured
-Low Poly OBJ export and a baked cloth frame entirely offline.
+and python3-pil. The offline run exercises a reference image, a Low Poly PBR
+material, its OBJ and GLB exports, and a baked cloth frame.
 For --generate, select a running Ollama with OLLAMA_URL or
 point OLLAMA_MODELS at the existing model cache for the bundled server.
 """
@@ -11,6 +11,7 @@ point OLLAMA_MODELS at the existing model cache for the bundled server.
 import argparse
 import json
 import os
+import struct
 import subprocess
 import sys
 import tempfile
@@ -265,9 +266,8 @@ def exercise(binary, work, generate):
 
     def save_as(name):
         ext = Path(name).suffix
-        click(
-            expect(frame, at.ROLE_PUSH_BUTTON, "Экспорт OBJ" if ext == ".obj" else "Сохранить")
-        )
+        title = {".obj": "Экспорт OBJ", ".glb": "Экспорт GLB", ".xtri": "Сохранить"}[ext]
+        click(expect(frame, at.ROLE_PUSH_BUTTON, title))
         click(expect(desktop, at.ROLE_PUSH_BUTTON, "Save"))
         output = work / "exports" / ("model" + ext)
         wait_for(lambda: output.is_file() and output.stat().st_size > 0, str(output), process)
@@ -295,6 +295,8 @@ def exercise(binary, work, generate):
         expect(frame, at.ROLE_LABEL, "Модель по референсу готова")
         expect(frame, at.ROLE_COMBO_BOX, "1. Front ring")
         click(expect(frame, at.ROLE_PUSH_BUTTON, "Текстура детали"))
+        pbr = expect(frame, at.ROLE_CHECK_BOX, "PBR-материал")
+        assert pbr.getState().contains(at.STATE_CHECKED)
         field = expect(frame, at.ROLE_TEXT, "Описание текстуры")
         field.queryEditableText().setTextContents("Красная ткань #a80000 #ff1808")
         click(expect(frame, at.ROLE_PUSH_BUTTON, "Назначить"))
@@ -308,6 +310,18 @@ def exercise(binary, work, generate):
         ring = save_as("textured-ring.obj")
         check_obj(ring, [0.8, 0.44, 1], expected_euler=0)
         check_material(ring, 256)
+        glb = save_as("textured-ring.glb").read_bytes()
+        magic, version, size, json_size, kind = struct.unpack_from("<4sIII4s", glb)
+        assert (magic, version, size, kind) == (b"glTF", 2, len(glb), b"JSON")
+        doc = json.loads(glb[20 : 20 + json_size])
+        primitive = doc["meshes"][0]["primitives"][0]
+        material = doc["materials"][primitive["material"]]
+        assert {"NORMAL", "TANGENT", "TEXCOORD_0"} <= primitive["attributes"].keys()
+        assert (
+            "normalTexture" in material
+            and "metallicRoughnessTexture" in material["pbrMetallicRoughness"]
+        )
+        assert len(doc["images"]) == 3
         click(expect(frame, at.ROLE_PUSH_BUTTON, "Физика"))
         slider = expect(frame, at.ROLE_SLIDER, "Кадр симуляции")
         slider.queryValue().currentValue = 6
@@ -315,7 +329,7 @@ def exercise(binary, work, generate):
         click(expect(frame, at.ROLE_PUSH_BUTTON, "Запечь кадр в модель"))
         expect(frame, at.ROLE_COMBO_BOX, "2. Ткань")
         saved = json.loads(save_as("textured-ring-and-cloth.xtri").read_text())
-        assert saved["style"] == "low_poly"
+        assert saved["style"] == "low_poly" and saved["version"] == 5
         ring, cloth = saved["parts"]
         assert ring["shape"] == "reference" and [round(v, 5) for v in ring["size"]] == [
             0.8,
@@ -325,6 +339,10 @@ def exercise(binary, work, generate):
         (mask,) = ring["masks"]
         assert "1" in mask[len(mask) // 2] and mask[len(mask) // 2][len(mask[0]) // 2] == "0"
         assert ring["texture"]["material"] == "fabric" and cloth["shape"] == "surface"
+        assert (
+            ring["texture"]["pbr"]["metallic"] == 0
+            and ring["texture"]["pbr"]["normal_strength"] > 0
+        )
         assert cloth["surface"]["vertices"] and cloth["surface"]["faces"]
         print("Front PNG hole, Low Poly and cloth bake preserved in the project", flush=True)
 

@@ -6,10 +6,12 @@ import stat
 import tempfile
 from pathlib import Path
 
+import numpy as np
+
 from .geometry import build, check_scene_budget
 from .model import DETAILS, MODES, Scene
 from .resources import MIB, capacity
-from .textures import pixels, png_bytes, uv_layout
+from .textures import metallic_roughness_pixels, normal_pixels, pixels, png_bytes, uv_layout
 
 
 def atomic_write(path, write):
@@ -32,7 +34,12 @@ MAX_PROJECT_BYTES = 16 * 1024 * 1024
 
 def save_project(path, scene, mode):
     def write(file):
-        payload = {"version": 4, "mode": mode, **scene.data()}
+        has_material_data = any(
+            (p.texture and p.texture.pbr) or (p.surface and p.surface.uv is not None)
+            for p in scene.parts
+        )
+        version = 5 if has_material_data else 4
+        payload = {"version": version, "mode": mode, **scene.data()}
         json.dump(payload, file, ensure_ascii=False, indent=2)
         if file.tell() > MAX_PROJECT_BYTES:
             raise ValueError("Слишком большой файл проекта")
@@ -56,7 +63,7 @@ def load_project(path):
     if (
         not isinstance(data, dict)
         or type(data.get("version")) is not int
-        or data["version"] not in (1, 2, 3, 4)
+        or data["version"] not in (1, 2, 3, 4, 5)
         or data.get("mode") not in MODES
     ):
         raise ValueError("Неизвестная версия или профиль проекта")
@@ -82,7 +89,7 @@ def _sync_directory(path):
         os.close(fd)
 
 
-def _material_library(parent, parts):
+def _material_library(parent, parts, mode):
     specs = tuple(dict.fromkeys(p.texture for p in parts if p.texture is not None))
     if not specs:
         return None, {}
@@ -95,14 +102,27 @@ def _material_library(parent, parts):
         stage.mkdir()
         records = ["newmtl untextured\nKd 0.80 0.80 0.80\nillum 1\n"]
         hashes = {}
-        for spec, name in names.items():
-            payload = png_bytes(pixels(spec))
+
+        def write_map(image, prefix=""):
+            payload = png_bytes(image)
             digest = hashlib.sha256(payload).hexdigest()
-            filename = f"{digest}.png"
+            filename = f"{prefix}{digest}.png"
             if filename not in hashes:
                 _durable_bytes(stage / filename, payload)
                 hashes[filename] = (digest, len(payload))
-            records.append(f"newmtl {name}\nKd 1 1 1\nillum 1\nmap_Kd {filename}\n")
+            return filename
+
+        for spec, name in names.items():
+            colour = write_map(pixels(spec))
+            record = f"newmtl {name}\nKd 1 1 1\nillum 1\nmap_Kd {colour}\n"
+            if mode == "game" and spec.pbr is not None:
+                normal = write_map(normal_pixels(spec), "normal-gl-")
+                packed = metallic_roughness_pixels(spec)
+                roughness = write_map(packed[:, :, 1], "roughness-")
+                metallic = write_map(packed[:, :, 2], "metallic-")
+                del packed
+                record += f"norm {normal}\nPr 1\nmap_Pr {roughness}\nPm 1\nmap_Pm {metallic}\n"
+            records.append(record)
         library = "\n".join(records).encode("ascii")
         digest = hashlib.sha256(library).hexdigest()
         hashes["surface.mtl"] = (digest, len(library))
@@ -130,13 +150,13 @@ def _material_library(parent, parts):
 def export_obj(path, scene, mode):
     check_scene_budget(scene, mode)
     path = Path(path)
-    library, materials = _material_library(path.parent, scene.parts)
+    library, materials = _material_library(path.parent, scene.parts, mode)
 
     def write(file):
         file.write("# Xtrifid · Z up · metres\n")
         if library:
             file.write(f"mtllib {library}\n")
-        offset = uv_offset = 1
+        offset = uv_offset = normal_offset = 1
         for index, part in enumerate(scene.parts, 1):
             mesh = build(part, mode, scene.detail, scene.style)
             file.write(f"o {index:02}_{part.name.replace(' ', '_')}\n")
@@ -145,16 +165,32 @@ def export_obj(path, scene, mode):
             for x, y, z in mesh.vertices:
                 file.write(f"v {x:.12g} {y:.12g} {z:.12g}\n")
             uv_faces = None
+            normal_faces = None
             if part.texture is not None:
                 uv, uv_faces = uv_layout(mesh, part)
                 for u, v in uv:
                     file.write(f"vt {u:.12g} {v:.12g}\n")
+                if mode == "game" and part.texture.pbr is not None:
+                    from .tangents import corner_normals
+
+                    _, corner_ns = corner_normals(mesh)
+                    normals, inverse = np.unique(
+                        corner_ns.reshape(-1, 3), axis=0, return_inverse=True
+                    )
+                    normal_faces = inverse.reshape(-1, 3)
+                    for nx, ny, nz in normals:
+                        file.write(f"vn {nx:.9g} {ny:.9g} {nz:.9g}\n")
             last = None
             for i, (face, smooth) in enumerate(zip(mesh.faces, mesh.smooth)):
                 if last != smooth:
                     file.write("s 1\n" if smooth else "s off\n")
                     last = smooth
-                if uv_faces is None:
+                if normal_faces is not None:
+                    corners = (
+                        f"{v + offset}/{t + uv_offset}/{n + normal_offset}"
+                        for v, t, n in zip(face, uv_faces[i], normal_faces[i])
+                    )
+                elif uv_faces is None:
                     corners = (str(v + offset) for v in face)
                 else:
                     corners = (
@@ -164,6 +200,8 @@ def export_obj(path, scene, mode):
             offset += len(mesh.vertices)
             if uv_faces is not None:
                 uv_offset += len(uv)
+            if normal_faces is not None:
+                normal_offset += len(normals)
 
     atomic_write(path, write)
     if library:

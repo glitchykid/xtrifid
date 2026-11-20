@@ -2,7 +2,8 @@
 
 import base64
 import binascii
-from dataclasses import dataclass
+import struct
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -19,12 +20,68 @@ def _decode(encoded, limit):
         raise ValueError("Повреждены данные запечённой поверхности") from exc
 
 
+def _polygons(packed):
+    for a, b, c, d in struct.iter_unpack("<4i", packed):
+        yield (a, b, c) if d == -1 else (a, b, c, d)
+
+
+@dataclass(frozen=True)
+class SurfaceUV:
+    coords: bytes  # little-endian float32 UV pairs; keep coincident chart seams distinct
+    faces: bytes  # same face order and triangle sentinel as the surface mesh
+
+    @classmethod
+    def checked(cls, coords, faces, geometry):
+        quads = geometry[:, 3] != -1
+        count = 3 * len(geometry) + int(quads.sum())
+        if (
+            len(coords) % 8
+            or not 1 <= len(coords) // 8 <= count
+            or len(faces) != geometry.nbytes
+        ):
+            raise ValueError("Некорректный размер UV-развёртки")
+        points = np.frombuffer(coords, "<f4")
+        ids = np.frombuffer(faces, "<i4").reshape(-1, 4)
+        # Generated charts fit a tile and may extend across its periodic seam.
+        if (
+            not np.isfinite(points).all()
+            or np.max(np.abs(points)) > 2.000001
+            or (ids[:, :3] < 0).any()
+            or (ids[quads, 3] < 0).any()
+            or (ids[~quads, 3] != -1).any()
+            or ids.max() >= len(coords) // 8
+        ):
+            raise ValueError("Некорректные координаты или углы UV-развёртки")
+        return cls(coords, faces)
+
+    @classmethod
+    def from_layout(cls, chart, geometry):
+        coords, faces = chart
+        if len(faces) != len(geometry) or not 1 <= len(coords) <= 4 * len(geometry):
+            raise ValueError("UV-развёртка не соответствует исходной сетке")
+        points = np.asarray(coords)
+        if points.shape != (len(coords), 2) or points.dtype.kind not in "ifu":
+            raise ValueError("Неверная таблица UV-координат")
+        ids = np.full_like(geometry, -1)
+        for index, face in enumerate(faces):
+            size = 3 if geometry[index, 3] == -1 else 4
+            if len(face) != size or any(
+                (type(i) is not int and not isinstance(i, np.integer))
+                or not 0 <= i < len(coords)
+                for i in face
+            ):
+                raise ValueError("UV-углы не соответствуют грани исходной сетки")
+            ids[index, :size] = face
+        return cls.checked(points.astype("<f4", copy=False).tobytes(), ids.tobytes(), geometry)
+
+
 @dataclass(frozen=True)
 class Surface:
     vertices: bytes  # local XYZ float64
     faces: bytes  # four little-endian int32 indices; -1 terminates triangles
     smooth: bytes
     triangles: int
+    uv: SurfaceUV | None = None
 
     @classmethod
     def _checked(cls, vertices, faces, smooth):
@@ -56,31 +113,60 @@ class Surface:
 
     @classmethod
     def parse(cls, value):
-        if not isinstance(value, dict) or value.keys() != {"vertices", "faces", "smooth"}:
+        fields = {"vertices", "faces", "smooth"}
+        if not isinstance(value, dict) or value.keys() not in (fields, fields | {"uv"}):
             raise ValueError("Отсутствуют данные запечённой сетки")
-        return cls._checked(
+        surface = cls._checked(
             _decode(value["vertices"], MAX_VERTICES * 24),
             _decode(value["faces"], MAX_FACES * 16),
             _decode(value["smooth"], MAX_FACES),
         )
+        if "uv" in value:
+            chart = value["uv"]
+            if not isinstance(chart, dict) or chart.keys() != {"coords", "faces"}:
+                raise ValueError("Некорректная запечённая UV-развёртка")
+            geometry = np.frombuffer(surface.faces, "<i4").reshape(-1, 4)
+            corners = 3 * len(geometry) + int((geometry[:, 3] != -1).sum())
+            surface = replace(
+                surface,
+                uv=SurfaceUV.checked(
+                    _decode(chart["coords"], 8 * corners),
+                    _decode(chart["faces"], geometry.nbytes),
+                    geometry,
+                ),
+            )
+        return surface
 
     def data(self):
-        return {
+        data = {
             key: base64.b64encode(getattr(self, key)).decode("ascii")
             for key in ("vertices", "faces", "smooth")
         }
+        if self.uv is not None:
+            data["uv"] = {
+                key: base64.b64encode(getattr(self.uv, key)).decode("ascii")
+                for key in ("coords", "faces")
+            }
+        return data
 
     def mesh(self):
         xyz = np.frombuffer(self.vertices, dtype="<f8").reshape(-1, 3)
-        indices = np.frombuffer(self.faces, dtype="<i4").reshape(-1, 4).tolist()
-        return (
-            xyz,
-            tuple(tuple(row[:3] if row[3] == -1 else row) for row in indices),
-            tuple(map(bool, self.smooth)),
-        )
+        return xyz, tuple(_polygons(self.faces)), tuple(map(bool, self.smooth))
+
+    def uv_layout(self, mesh_faces):
+        from .geometry import triangles
+
+        geometry, uv_faces = _polygons(self.faces), _polygons(self.uv.faces)
+        if len(mesh_faces) != len(self.smooth):
+            if len(mesh_faces) != self.triangles:
+                raise ValueError("Топология запечённой UV-развёртки изменилась")
+            geometry, uv_faces = triangles(geometry), triangles(uv_faces)
+        if any(tuple(face) != expected for face, expected in zip(mesh_faces, geometry)):
+            raise ValueError("Порядок граней запечённой UV-развёртки изменился")
+        return np.frombuffer(self.uv.coords, "<f4").reshape(-1, 2), tuple(uv_faces)
 
 
-def baked_part(name, mesh):
+def baked_part(name, mesh, *, uv_chart=None):
     from .model import MAX_LENGTH, MIN_SIZE, Part, vector
 
     if not 3 <= len(mesh.vertices) <= MAX_VERTICES or not 1 <= len(mesh.faces) <= MAX_FACES:
@@ -102,4 +188,6 @@ def baked_part(name, mesh):
             raise ValueError("Неверная грань в кадре симуляции")
         indices[i, : len(face)] = face
     surface = Surface._checked(local.tobytes(), indices.tobytes(), bytes(mesh.smooth))
+    if uv_chart is not None:
+        surface = replace(surface, uv=SurfaceUV.from_layout(uv_chart, indices))
     return Part(name, "surface", size, center, (0.0, 0.0, 0.0), surface=surface)
