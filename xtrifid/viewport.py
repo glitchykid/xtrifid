@@ -1,6 +1,7 @@
 """GTK OpenGL viewport. Display lighting and grid are never written to the asset."""
 
 import ctypes
+from concurrent.futures import ThreadPoolExecutor
 from math import asin, atan2, cos, sin
 
 import numpy as np
@@ -10,34 +11,113 @@ from OpenGL.raw.GL.VERSION.GL_2_0 import glVertexAttribPointer
 
 from xtrifid.gtk import Gdk, GLib, Gtk
 
-from .geometry import rotation_matrix, triangles
-from .textures import pixels, uv_layout
+from .geometry import rotation_matrix
+from .tangents import corner_frames, corner_normals, texture_chart
+from .textures import metallic_roughness_pixels, normal_pixels, pixels
+
+VERTEX_FLOATS = 13
 
 VERT = """#version 330 core
 layout(location=0) in vec3 position;
 layout(location=1) in vec3 normal;
 layout(location=2) in float part;
 layout(location=3) in vec2 uv;
+layout(location=4) in vec4 tangent;
 out vec2 texcoord;
 uniform mat4 camera;
 out vec3 n;
+out vec3 t;
+flat out float handedness;
 flat out int id;
-void main(){ gl_Position=camera*vec4(position,1); n=normal; id=int(part); texcoord=uv; }"""
+void main() {
+    gl_Position = camera * vec4(position, 1);
+    n = normal;
+    t = tangent.xyz;
+    handedness = tangent.w;
+    id = int(part);
+    texcoord = uv;
+}"""
 FRAG = """#version 330 core
 in vec3 n;
+in vec3 t;
+flat in float handedness;
 flat in int id;
 uniform int selected;
 uniform int portrait;
 uniform int mapped;
 uniform sampler2D diffuse;
+uniform sampler2D normalMap;
+uniform sampler2D metallicRoughness;
+uniform vec3 toEye;
 in vec2 texcoord;
 uniform int passKind;
 out vec4 color;
+
+const float PI = 3.14159265;
+
+vec3 fresnel(vec3 f0, float cosine) {
+    return f0 + (1.0 - f0) * pow(1.0 - cosine, 5.0);
+}
+
+// GGX normal distribution, height-correlated Smith visibility and Schlick Fresnel.
+vec3 directLight(vec3 N, vec3 L, vec3 radiance, vec3 diffuseColor, vec3 f0, float rough) {
+    vec3 H = toEye + L;
+    H *= inversesqrt(max(dot(H, H), 1e-8));
+    float nv = max(dot(N, toEye), 0.0001);
+    float nl = max(dot(N, L), 0.0);
+    float nh = clamp(dot(N, H), 0.0, 1.0);
+    float vh = clamp(dot(toEye, H), 0.0, 1.0);
+    float alpha2 = pow(max(rough, 0.06), 4.0);
+    float d = nh * nh * (alpha2 - 1.0) + 1.0;
+    float distribution = alpha2 / (PI * d * d);
+    float gv = nl * sqrt(nv * nv * (1.0 - alpha2) + alpha2);
+    float gl = nv * sqrt(nl * nl * (1.0 - alpha2) + alpha2);
+    float visibility = 0.5 / max(gv + gl, 0.0001);
+    vec3 f = fresnel(f0, vh);
+    return ((1.0 - f) * diffuseColor / PI + distribution * visibility * f) * radiance * nl;
+}
+
+// An analytic studio environment gives a polished conductor something to reflect.
+vec3 environment(vec3 r, float rough) {
+    float sky = smoothstep(-0.15 - rough, 0.45 + rough, r.z);
+    vec3 light = mix(vec3(.09, .085, .08), vec3(.47, .55, .69), sky);
+    float key = dot(r, normalize(vec3(-.62, -.60, .55)));
+    float rim = dot(r, normalize(vec3(.70, .48, .52)));
+    float exponent = mix(72.0, 3.0, rough * rough);
+    float energy = mix(2.8, .25, rough);
+    return light + energy * (vec3(1.0, .92, .82) * exp((key - 1.0) * exponent)
+                           + vec3(.61, .77, 1.0) * exp((rim - 1.0) * exponent));
+}
+
+vec3 pbrColor(vec3 N) {
+    vec3 T = normalize(t - N * dot(t, N));
+    vec3 B = cross(N, T) * handedness;
+    vec3 detail = texture(normalMap, texcoord).xyz * 2.0 - 1.0;
+    N = normalize(mat3(T, B, N) * detail);
+    vec3 base = texture(diffuse, texcoord).rgb;
+    vec2 mr = texture(metallicRoughness, texcoord).gb;
+    float rough = mr.x;
+    vec3 f0 = mix(vec3(0.04), base, mr.y);
+    vec3 albedo = base * (1.0 - mr.y);
+    vec3 key = normalize(vec3(-.40, -.63, .88));
+    vec3 rim = normalize(vec3(.65, .43, .65));
+    vec3 lit = directLight(N, key, vec3(3.25, 3.0, 2.68), albedo, f0, rough)
+             + directLight(N, rim, vec3(1.05, 1.25, 1.65), albedo, f0, rough);
+    float nv = clamp(dot(N, toEye), 0.0, 1.0);
+    vec3 f = f0 + (max(vec3(1.0 - rough), f0) - f0) * pow(1.0 - nv, 5.0);
+    lit += f * environment(reflect(-toEye, N), rough);
+    lit += (1.0 - f) * albedo * mix(vec3(.17, .16, .15), vec3(.40, .45, .53), .5 + .5 * N.z);
+    vec3 display = lit / (1.0 + lit);
+    return mix(12.92 * display, 1.055 * pow(display, vec3(1.0 / 2.4)) - 0.055,
+               greaterThan(display, vec3(.0031308)));
+}
+
 void main(){
     if(passKind==3){color=vec4(1.,.80,.42,1);return;}
     if(passKind==2){color=vec4(.18,.21,.26,1);return;}
     if(passKind==1){color=vec4(.13,.17,.22,1);return;}
     vec3 normal=normalize(n);
+    if(mapped==2){color=vec4(pbrColor(normal),1);return;}
     float key=max(dot(normal,normalize(vec3(-.4,-.6,1.))),0.);
     float fill=max(dot(normal,normalize(vec3(.6,.7,.3))),0.);
     float light=.43+.38*key+.19*fill;
@@ -47,29 +127,21 @@ void main(){
 }"""
 
 
-def _surface(vertices, mesh, index, part):
-    corners = np.array(list(triangles(mesh.faces)))
-    if not len(corners):
-        return np.empty((0, 9), np.float32)
-    points = vertices[corners]
-    normals = np.cross(points[:, 1] - points[:, 0], points[:, 2] - points[:, 0])
-    smooth = np.repeat(mesh.smooth, [len(face) - 2 for face in mesh.faces])
-    averaged = np.zeros_like(vertices)
-    for col in range(3):
-        np.add.at(averaged, corners[smooth, col], normals[smooth])
-    ns = np.repeat(normals[:, None, :], 3, axis=1)
-    ns[smooth] = averaged[corners[smooth]]
-    ns /= np.maximum(np.linalg.norm(ns, axis=2, keepdims=True), 1e-30)
-    surface = np.zeros((points.size // 3, 9), np.float32)
+def _surface(vertices, mesh, index, part, *, chart=None):
+    mapped = part is not None and part.texture is not None
+    if mapped:
+        corners, ns, uv, tangents = corner_frames(mesh, part, chart=chart)
+    else:
+        corners, ns = corner_normals(mesh)
+    surface = np.zeros((corners.size, VERTEX_FLOATS), np.float32)
     surface[:, :3], surface[:, 3:6], surface[:, 6] = (
-        points.reshape(-1, 3),
+        vertices[corners].reshape(-1, 3),
         ns.reshape(-1, 3),
         index,
     )
-    if part and part.texture is not None:
-        uv, faces = uv_layout(mesh, part)
-        uv_indices = np.asarray(list(triangles(faces))).reshape(-1)
-        surface[:, 7:] = uv[uv_indices]
+    if mapped:
+        surface[:, 7:9] = uv.reshape(-1, 2)
+        surface[:, 9:] = tangents.reshape(-1, 4)
     return surface
 
 
@@ -88,7 +160,7 @@ def batches(meshes, parts, center, radius):
             for a, b in zip(face, face[1:] + face[:1])
         }
         pts = vertices[np.array(sorted(edges))].reshape(-1, 3)
-        wire = np.zeros((len(pts), 9), np.float32)
+        wire = np.zeros((len(pts), VERTEX_FLOATS), np.float32)
         wire[:, :3] = pts
         lines.append(wire)
         ranges.append(
@@ -102,9 +174,14 @@ def batches(meshes, parts, center, radius):
         )
         surface_offset += len(surface)
         line_offset += len(wire)
-    surface = np.concatenate(surfaces) if surfaces else np.empty((0, 9), np.float32)
-    wire = np.concatenate(lines) if lines else np.empty((0, 9), np.float32)
+    surface = np.concatenate(surfaces) if surfaces else np.empty((0, VERTEX_FLOATS), np.float32)
+    wire = np.concatenate(lines) if lines else np.empty((0, VERTEX_FLOATS), np.float32)
     return surface, wire, np.array(owners), ranges
+
+
+def _material_images(spec):
+    generators = (pixels, normal_pixels, metallic_roughness_pixels) if spec.pbr else (pixels,)
+    return tuple(np.ascontiguousarray(generate(spec)[::-1]) for generate in generators)
 
 
 class Viewport(Gtk.GLArea):
@@ -120,8 +197,10 @@ class Viewport(Gtk.GLArea):
         self.problem = None
         self.drawn = False
         self.program = None
-        self.guide = np.empty((0, 9), dtype=np.float32)
+        self.guide = np.empty((0, VERTEX_FLOATS), dtype=np.float32)
         self.textures = {}
+        self.failed_textures = set()
+        self.texture_worker = self.texture_job = None
         self.guide_capacity = 0
         self.guide_dirty = True
         self.set_meshes([])
@@ -172,11 +251,14 @@ class Viewport(Gtk.GLArea):
             )
         surface, wire, owners, ranges = batches(meshes, parts, center, radius)
         desired_textures = tuple(dict.fromkeys(spec for *_, spec in ranges if spec))
+        textured_meshes = {
+            i: (mesh, part) for i, (mesh, part) in enumerate(zip(meshes, parts)) if part.texture
+        }
         grid = []
         for i in range(-12, 13):
             t = i / 5
             grid.extend(((t, -2.4, floor), (t, 2.4, floor), (-2.4, t, floor), (2.4, t, floor)))
-        floor_lines = np.column_stack((grid, np.zeros((len(grid), 6))))
+        floor_lines = np.column_stack((grid, np.zeros((len(grid), VERTEX_FLOATS - 3))))
         buffer = np.concatenate((surface, wire, floor_lines), dtype=np.float32)
         # Keep the pick coordinates as a view of the same storage sent to OpenGL.
         pick_points = buffer[: len(surface), :3].reshape(-1, 3, 3)
@@ -185,6 +267,9 @@ class Viewport(Gtk.GLArea):
         self.counts = len(surface), len(wire), len(grid)
         self.buffer, self.owners, self.pick_points = buffer, owners, pick_points
         self.ranges, self.desired_textures = ranges, desired_textures
+        self.failed_textures.clear()
+        self.textured_meshes = textured_meshes
+        self.sim_chart = self.sim_chart_owner = None
         self.sim_surface = self.sim_replaces = None
         if getattr(self, "focused", None) is not None:
             if self.focused < len(frames):
@@ -197,21 +282,20 @@ class Viewport(Gtk.GLArea):
     def set_simulation_preview(self, mesh, replace_selected=False):
         """Stream one transient mesh while keeping the static buffers and picking valid."""
         self.sim_replaces = self.selected if mesh is not None and replace_selected else None
-        self.sim_surface = (
-            None
-            if mesh is None
-            else _surface(
-                (mesh.vertices - self.center) / self.radius, mesh, self.selected, None
-            )
-        )
-        self.sim_material = None
-        if self.sim_replaces is not None and 0 <= self.sim_replaces < len(self.ranges):
-            start, count, _, _, material = self.ranges[self.sim_replaces]
-            # Replacement simulations retain the selected garment's corner order.
-            # Keep rest-space UVs attached to the cloth as its positions change.
-            if material and count == len(self.sim_surface):
-                self.sim_material = material
-                self.sim_surface[:, 7:] = self.buffer[start : start + count, 7:]
+        part = chart = None
+        if self.sim_replaces in self.textured_meshes:
+            rest_mesh, source = self.textured_meshes[self.sim_replaces]
+            if rest_mesh.faces == mesh.faces and len(rest_mesh.vertices) == len(mesh.vertices):
+                part = source
+                if self.sim_chart_owner != self.sim_replaces:
+                    self.sim_chart = texture_chart(rest_mesh, part)
+                    self.sim_chart_owner = self.sim_replaces
+                chart = self.sim_chart
+        self.sim_material = part.texture if part else None
+        self.sim_surface = None
+        if mesh is not None:
+            vertices = (mesh.vertices - self.center) / self.radius
+            self.sim_surface = _surface(vertices, mesh, self.selected, part, chart=chart)
         self.sim_dirty = True
         self.queue_render()
 
@@ -240,7 +324,7 @@ class Viewport(Gtk.GLArea):
         return True
 
     def set_guide(self, points=()):
-        self.guide = np.zeros((len(points), 9), dtype=np.float32)
+        self.guide = np.zeros((len(points), VERTEX_FLOATS), dtype=np.float32)
         if len(points):
             self.guide[:, :3] = (np.asarray(points) - self.center) / self.radius
         if len(points) > self.guide_capacity:
@@ -333,12 +417,24 @@ class Viewport(Gtk.GLArea):
         for vao, vbo in ((self.vao, self.vbo), (self.sim_vao, self.sim_vbo)):
             GL.glBindVertexArray(vao)
             GL.glBindBuffer(GL.GL_ARRAY_BUFFER, vbo)
-            for i, size, offset in ((0, 3, 0), (1, 3, 12), (2, 1, 24), (3, 2, 28)):
+            for i, size, offset in ((0, 3, 0), (1, 3, 12), (2, 1, 24), (3, 2, 28), (4, 4, 36)):
                 GL.glEnableVertexAttribArray(i)
-                glVertexAttribPointer(i, size, GL.GL_FLOAT, False, 36, ctypes.c_void_p(offset))
+                glVertexAttribPointer(
+                    i, size, GL.GL_FLOAT, False, VERTEX_FLOATS * 4, ctypes.c_void_p(offset)
+                )
         self.uniforms = {
             name: GL.glGetUniformLocation(self.program, name)
-            for name in ("camera", "passKind", "selected", "portrait", "mapped", "diffuse")
+            for name in (
+                "camera",
+                "passKind",
+                "selected",
+                "portrait",
+                "mapped",
+                "diffuse",
+                "normalMap",
+                "metallicRoughness",
+                "toEye",
+            )
         }
         self.dirty = self.sim_dirty = True
         self.sim_capacity = 0
@@ -347,47 +443,108 @@ class Viewport(Gtk.GLArea):
         self.make_current()
         if self.program and not self.get_error():
             if self.textures:
-                GL.glDeleteTextures(list(self.textures.values()))
+                GL.glDeleteTextures([name for maps in self.textures.values() for name in maps])
             GL.glDeleteVertexArrays(2, [self.vao, self.sim_vao])
             GL.glDeleteBuffers(2, [self.vbo, self.sim_vbo])
             GL.glDeleteProgram(self.program)
         self.textures.clear()
+        self.failed_textures.clear()
+        if self.texture_worker:
+            self.texture_worker.shutdown(wait=False, cancel_futures=True)
+            self.texture_worker = self.texture_job = None
         self.program = None
 
     def _upload_textures(self):
-        for spec in self.textures.keys() - set(self.desired_textures):
-            GL.glDeleteTextures([self.textures.pop(spec)])
-        missing = [s for s in self.desired_textures if s not in self.textures]
+        desired = set(self.desired_textures)
+        for spec in self.textures.keys() - desired:
+            GL.glDeleteTextures(self.textures.pop(spec))
+        self.failed_textures.intersection_update(desired)
+        missing = [
+            s
+            for s in self.desired_textures
+            if s not in self.textures and s not in self.failed_textures
+        ]
+        images = None
+        if self.texture_job:
+            pending, future = self.texture_job
+            if not future.done():
+                return
+            self.texture_job = None
+            if pending in missing:
+                spec = pending
+                try:
+                    images = future.result()
+                except Exception as exc:
+                    self._reject_texture(spec, exc)
+                    return
         if not missing:
             return
-        # At most one image per frame when reopening a many-material project.
-        spec = missing[0]
-        image = np.ascontiguousarray(pixels(spec)[::-1])
-        name = GL.glGenTextures(1)
+        if images is None:
+            spec = missing[0]
+            if spec.resolution >= 512:
+                # Large maps are rasterized one material at a time. The worker
+                # owns its arrays; all OpenGL calls stay on the GTK thread.
+                if self.texture_worker is None:
+                    self.texture_worker = ThreadPoolExecutor(
+                        max_workers=1, thread_name_prefix="material"
+                    )
+                future = self.texture_worker.submit(_material_images, spec)
+                self.texture_job = (spec, future)
+                future.add_done_callback(lambda _: GLib.idle_add(self.queue_render))
+                return
         try:
-            GL.glBindTexture(GL.GL_TEXTURE_2D, name)
-            GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR)
-            GL.glTexParameteri(
-                GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR_MIPMAP_LINEAR
+            self._upload_material(
+                spec, images if images is not None else _material_images(spec)
             )
-            GL.glTexImage2D(
-                GL.GL_TEXTURE_2D,
-                0,
-                GL.GL_RGB8,
-                spec.resolution,
-                spec.resolution,
-                0,
-                GL.GL_RGB,
-                GL.GL_UNSIGNED_BYTE,
-                image,
-            )
-            GL.glGenerateMipmap(GL.GL_TEXTURE_2D)
-        except Exception:
-            GL.glDeleteTextures([name])
-            raise
-        self.textures[spec] = name
+        except Exception as exc:
+            self._reject_texture(spec, exc)
+            return
         if len(missing) > 1:
             GLib.idle_add(self.queue_render)
+
+    def _reject_texture(self, spec, exc):
+        self.failed_textures.add(spec)
+        self.on_error(
+            f"Не удалось показать материал {spec.material} ({spec.resolution} px): {exc}"
+        )
+        GLib.idle_add(self.queue_render)
+
+    def _upload_material(self, spec, images):
+        names = []
+        try:
+            for index, image in enumerate(images):
+                name = GL.glGenTextures(1)
+                names.append(name)
+                GL.glBindTexture(GL.GL_TEXTURE_2D, name)
+                GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR)
+                GL.glTexParameteri(
+                    GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR_MIPMAP_LINEAR
+                )
+                internal = GL.GL_SRGB8 if spec.pbr and index == 0 else GL.GL_RGB8
+                GL.glTexImage2D(
+                    GL.GL_TEXTURE_2D,
+                    0,
+                    internal,
+                    spec.resolution,
+                    spec.resolution,
+                    0,
+                    GL.GL_RGB,
+                    GL.GL_UNSIGNED_BYTE,
+                    image,
+                )
+                GL.glGenerateMipmap(GL.GL_TEXTURE_2D)
+        except Exception:
+            if names:
+                GL.glDeleteTextures(names)
+            raise
+        self.textures[spec] = tuple(names)
+
+    def _bind_material(self, spec):
+        names = self.textures.get(spec, ())
+        GL.glUniform1i(self.uniforms["mapped"], 2 if len(names) == 3 else len(names))
+        for unit, name in enumerate(names):
+            GL.glActiveTexture(GL.GL_TEXTURE0 + unit)
+            GL.glBindTexture(GL.GL_TEXTURE_2D, name)
 
     def render_mesh(self, area, context):
         try:
@@ -418,6 +575,8 @@ class Viewport(Gtk.GLArea):
             matrix[:3, 3] = -matrix[:3, :3] @ self.target
             GL.glUseProgram(self.program)
             GL.glUniformMatrix4fv(self.uniforms["camera"], 1, True, matrix)
+            to_eye = -matrix[2, :3]
+            GL.glUniform3fv(self.uniforms["toEye"], 1, to_eye / np.linalg.norm(to_eye))
             GL.glUniform1i(self.uniforms["selected"], self.selected)
             human = (
                 0 <= self.selected < len(self.frames)
@@ -425,6 +584,7 @@ class Viewport(Gtk.GLArea):
             )
             GL.glUniform1i(self.uniforms["portrait"], int(human))
             GL.glEnable(GL.GL_DEPTH_TEST)
+            GL.glDisable(GL.GL_FRAMEBUFFER_SRGB)
             GL.glClearColor(0.068, 0.081, 0.105, 1)
             GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
             faces, edges, grid = self.counts
@@ -434,17 +594,15 @@ class Viewport(Gtk.GLArea):
             GL.glPolygonOffset(1, 1)
             GL.glUniform1i(self.uniforms["passKind"], 0)
             GL.glUniform1i(self.uniforms["diffuse"], 0)
+            GL.glUniform1i(self.uniforms["normalMap"], 1)
+            GL.glUniform1i(self.uniforms["metallicRoughness"], 2)
             for index, (start, count, _, _, spec) in enumerate(self.ranges):
                 if index == self.sim_replaces:
                     continue
-                name = self.textures.get(spec, 0)
-                GL.glUniform1i(self.uniforms["mapped"], int(bool(name)))
-                GL.glBindTexture(GL.GL_TEXTURE_2D, name)
+                self._bind_material(spec)
                 GL.glDrawArrays(GL.GL_TRIANGLES, start, count)
             if self.sim_surface is not None and len(self.sim_surface):
-                name = self.textures.get(self.sim_material, 0)
-                GL.glUniform1i(self.uniforms["mapped"], int(bool(name)))
-                GL.glBindTexture(GL.GL_TEXTURE_2D, name)
+                self._bind_material(self.sim_material)
                 GL.glBindVertexArray(self.sim_vao)
                 if self.sim_dirty:
                     GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.sim_vbo)
