@@ -37,9 +37,9 @@ The launcher starts Ollama and opens the studio. Use **Скачать модел
 
 ## Build and refine a model
 
-1. Enter `make a person with a cloak` under **Описание модели**. Choose **Game Ready** or **Для рендера**, then select **Низкая** (low), **Средняя** (medium) or **Высокая** (high) under **Детализация**. Press **Создать модель**.
-2. Drag to orbit and scroll to zoom. Click a visible part or select it under **Детали**. **Сетка** shows polygon boundaries. With the viewport focused, use the arrows to orbit, +/− to zoom and Home to fit.
-3. Select **Плащ** to change the cloak’s dimensions, centre or rotation, then press **Применить значения**. For a text edit, describe the change and press **Изменить деталь**. **Отменить действие** restores the previous state.
+1. Use the prompt to specify a shape, dimensions and how parts meet. For example, ask for a tabletop mirror with a round disc and an oval base. For an offline first run, enter `make a person`. Choose **Game Ready** or **Для рендера**, then select **Низкая** (low), **Средняя** (medium) or **Высокая** (high) under **Детализация**. Press **Создать модель**.
+2. Drag to orbit, scroll to zoom and click to select. **Сетка** shows polygon boundaries. **К детали** (F) frames the selection, **К лицу** frames a human face, and Home fits the whole model. The arrows rotate the view.
+3. Change the selected part’s dimensions, position or rotation with **Применить значения**. For a person, open **Анатомия и поза** to choose a neutral, male or female adult physique, set a pose, or resize individual regions including the ears, nose, lips and chin. Click **Применить к телу**. **Изменить деталь** applies a text edit and **Отменить действие** undoes the last change.
 4. **Сохранить** writes an editable `.xtri` project. **Открыть** restores it. **Экспорт OBJ** writes the current mesh. The executable saves directly to the folder you choose. In Docker, choose `/exports` to keep the file in the host’s `./exports` directory.
 
 ## Edit a corner or rim
@@ -48,6 +48,8 @@ Select a part and expand **Контур детали**. Click a point on the sec
 
 For a box or extrusion, the point controls a vertical edge in the local XY plane. For a cylinder, cone, tube or revolved profile, it controls a ring or pole by radius and Z. The first edit converts the primitive into an editable extrusion or revolved profile. The other control points retain their world positions. The part centre can move as its bounds change. Undo restores the previous shape. Spheres and tori support whole-part editing. Existing XTRI projects open directly.
 
+For a curved shell, open **Поперечные сечения**. Choose a ring, set its height, X/Y radii or centre in metres and click **Применить сечение**. The highlighted ring moves while the other rings keep their positions.
+
 ## Geometry profiles
 
 | Profile | Mesh |
@@ -55,13 +57,15 @@ For a box or extrusion, the point controls a vertical edge in the local XY plane
 | Game Ready | Consistently wound triangles. Round sections use 8, 16 or 32 segments at low, medium or high detail. A box uses 8 vertices and 12 triangles. |
 | Для рендера | Round sections use 24, 48 or 64 segments. Regular surfaces retain quad strips. Poles, rims and complex caps use triangles where needed. |
 
-The studio builds up to 48 named parts using primitives, extrusions, revolved profiles and anatomical sections. A person can stand, walk or extend their arms, with a short, knee-length or ankle-length cloak and an optional hood. The cloak opens at the front and has thickness. The body, limbs and clothing are independently selectable. Parts can intersect at joints. The figure is static and has no animation rig. OBJ contains geometry only.
+The local language model can assemble up to 48 named parts and describe curved shells with elliptical sections that shift, widen and narrow along their height. Dimensions and support relationships guide placement. Its interpretation of an unfamiliar shape may require correction.
+
+The adult figure uses a MakeHuman anatomical mesh. The ears, lips, eyelids, fingers and torso belong to one continuous skin surface. The eyes have their own geometry. A plain person is unclothed. Request a cloak or hood explicitly. Select the body to adjust its proportions. OBJ exports static geometry with no materials or animation rig.
 
 ## Detail and available resources
 
-The exact prompt above works offline without model weights. For a more specific request, try “A broad-shouldered traveller, 192 cm tall, walking in an ankle-length cloak with the hood up.” Ollama interprets the description. You can change mesh detail afterwards. A version 1 project opens at medium detail.
+Choose low, medium or high detail yourself. The human mesh has six resolutions across the two profiles. A project remembers your choice. Versions 1 and 2 remain readable. Basic figure prompts work offline. Free-form descriptions and text edits require Ollama weights.
 
-Open the editable example in Xtrifid to inspect the cloak and the two mesh profiles. [Cloaked figure project](https://github.com/glitchykid/xtrifid/releases/download/v0.4.0/cloaked-person.xtri) · [AI-generated 192 cm traveller](https://github.com/glitchykid/xtrifid/releases/download/v0.4.0/traveller-192.xtri)
+Editable examples · [Person](https://github.com/glitchykid/xtrifid/releases/download/v0.5.0/human.xtri) · [Mouse shell](https://github.com/glitchykid/xtrifid/releases/download/v0.5.0/mouse-shell.xtri) · [Tabletop mirror](https://github.com/glitchykid/xtrifid/releases/download/v0.5.0/table-mirror.xtri)
 
 Before preview or export, Xtrifid estimates triangle count against available RAM and Linux container limits. It reserves memory for the desktop and caps each scene at 150,000 triangles after triangulation. If the requested level exceeds the current budget, the previous scene stays available. Choose a lower level or Game Ready. When opening a saved project, you can accept a level that fits. Inference is limited separately by model size, memory, CPU threads and context length. Other applications can still consume system resources.
 
