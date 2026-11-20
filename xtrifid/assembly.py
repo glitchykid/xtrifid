@@ -2,12 +2,15 @@
 
 from dataclasses import replace
 
+from .components import fit_width, move_onto_support, ordered_components
 from .construction import finish_loft, orient_cylinder
 from .geometry import height_bounds
 from .model import MAX_LENGTH, Scene, vector
 
 
-def assemble(data, detail="medium", *, diameters=()):
+def assemble(data, detail="medium", *, diameters=(), roles=()):
+    if roles:
+        data = ordered_components(data, roles)
     parts = Scene.parse(data, simplify_profiles=True).parts
     # Apply literal diameters only when a single cylindrical part fits the measurement.
     named_diameters = {
@@ -34,13 +37,20 @@ def assemble(data, detail="medium", *, diameters=()):
             part = finish_loft(part, recipe)
         elif part.shape == "cylinder":
             part = orient_cylinder(part, recipe, named_diameters)
-        bottom, top = height_bounds(part, detail)
         s = supports[i]
+        if s > 0:
+            place(s - 1)
+            if roles:
+                part = fit_width(part, placed[s - 1], roles[i]["width"], detail)
+                part = move_onto_support(part, placed[s - 1], detail)
+        bottom, top = height_bounds(part, detail)
         if s >= 0:
             surface = 0.0
             if s:
-                place(s - 1)
                 surface = tops[s - 1]
+                if roles and roles[i]["joint"] == "joined":
+                    support_floor, _ = height_bounds(placed[s - 1], detail)
+                    surface -= 0.08 * min(top - bottom, surface - support_floor)
             delta = surface - bottom
             x, y, cz = part.center
             part = replace(part, center=vector((x, y, cz + delta), 3, -MAX_LENGTH, MAX_LENGTH))

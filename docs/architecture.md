@@ -8,7 +8,7 @@ Curved shells can be described by elliptical cross-sections with independently v
 
 ## Data flow
 
-1. The user chooses the profile and detail. GTK sends the prompt to a worker. A whole-prompt grammar handles common Russian and English figure requests offline. For other descriptions Ollama identifies a figure, an object assembled from parts, or a single shaped shell. Geometry requests receive the user’s detail level. The client checks the returned coordinates, dimensions, topology parameters and references before building any mesh. Invalid descriptions can be retried once.
+1. The user chooses the profile and detail. GTK sends the prompt to a worker. A whole-prompt grammar handles common Russian and English figure requests offline. For other descriptions Ollama identifies a figure, an object assembled from parts, or a single shaped shell. For a composite object the semantic pass can identify named parts, their supports, relative widths and whether they meet or overlap. The geometry pass receives those roles and the user’s detail level. The semantic response budget ranges from 192 to 768 tokens within the 2,048-token context. The client checks the returned coordinates, dimensions, topology parameters and references before building any mesh. Invalid descriptions can be retried once.
 2. The assembly resolver checks references and cycles, then places each supported part on the specified horizontal support plane. The geometry engine applies scaling followed by XYZ Euler rotation and translation.
 3. The document owns immutable part descriptions and up to 20 undo states. AI edits return a patch for one selected part. Numeric edits preserve untouched values, including precision beyond the displayed digits. A loft section edit works in metres and refits the changed part’s bounds around its existing world-space rings.
 4. The GTK OpenGL viewport and OBJ writer consume the same meshes. The viewport triangulates quads for display and uses the original polygon boundaries for its wire overlay. Display lighting stays in the viewport. The camera remembers the selected part as its orbit centre in close-up. For a human it frames the head and follows its orientation. Rendering and picking use the same transform.
@@ -109,5 +109,6 @@ docker compose run --rm --no-deps -e PYTHONPATH=/app tests xvfb-run -a dbus-run-
 For live examples of a curved mouse enclosure and a three-piece tabletop mirror on the installed language model, run the following in Docker. The checks measure the exported geometry, including the crest and the disc outline.
 
 ```sh
-docker compose run --rm --no-deps -v ./exports:/exports -e PYTHONPATH=/app tests python3 tests/live_freeform.py /exports
+docker compose run --rm --no-deps -v ./exports:/exports -e PYTHONPATH=/app tests python3 tests/live_freeform.py /exports mouse-shell
+docker compose run --rm --no-deps -v ./exports:/exports -e PYTHONPATH=/app tests python3 tests/live_freeform.py /exports table-mirror
 ```

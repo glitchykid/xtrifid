@@ -67,6 +67,11 @@ def verify_mushroom(scene):
         key=lambda bounds: bounds[0][2],
     )
     lo, hi = boxes[0]
+    if len(boxes) > 1:
+        cap_box = max(boxes, key=lambda pair: np.prod((pair[1] - pair[0])[:2]))
+        assert cap_box[0][2] > lo[2] + 0.01 * max(high[2] - lo[2] for _, high in boxes), (
+            "cap also placed directly on floor"
+        )
     for next_lo, next_hi in boxes[1:]:
         assert np.all(next_lo <= hi + 1e-7) and np.all(lo <= next_hi + 1e-7), (
             "detached mushroom geometry"

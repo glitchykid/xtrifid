@@ -14,6 +14,7 @@ from .character import (
     character_anchor,
     with_character_pose,
 )
+from .components import COMPONENTS_SCHEMA, read_components
 from .construction import CAP_STEPS, CYLINDER_AXES, LOFT_ENDS, LOFT_LEANS
 from .model import (
     DETAILS,
@@ -87,6 +88,16 @@ def placed_schema(shapes, extra=()):
     keys = PART["required"] + list(extra)
     properties = {key: PART["properties"][key] for key in keys}
     properties["shape"] = {"type": "string", "enum": shapes}
+    if shapes == ["lathe"]:
+        meridian = {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": dict.fromkeys(
+                ("radius", "height"), {"type": "number", "minimum": 0, "maximum": 1}
+            ),
+            "required": ["radius", "height"],
+        }
+        properties["outline"] = properties["outline"] | {"items": meridian}
     if shapes == ["cylinder"]:
         # Establish the world direction before the model fills in local angles.
         properties = {
@@ -119,7 +130,8 @@ PLACED_PART = {
             [s for s in PRIMITIVES if s not in (*PROFILE_SHAPES, "tube", "cylinder")]
         ),
         placed_schema(["cylinder"]),
-        placed_schema(list(PROFILE_SHAPES), ("outline",)),
+        placed_schema(["extrusion"], ("outline",)),
+        placed_schema(["lathe"], ("outline",)),
         placed_schema(["tube"], ("inner_diameter",)),
         LOFT_PART,
     ]
@@ -147,18 +159,20 @@ SUBJECT = {
         {
             "type": "object",
             "additionalProperties": False,
-            "required": ["subject", "form"],
+            "required": ["subject", "components", "form"],
             "properties": {
                 "subject": {"type": "string", "enum": ["object"]},
+                "components": COMPONENTS_SCHEMA,
                 "form": {"type": "string", "enum": ["general"]},
             },
         },
         {
             "type": "object",
             "additionalProperties": False,
-            "required": ["subject", "form", "bottom_end", "top_end", "top_lean"],
+            "required": ["subject", "components", "form", "bottom_end", "top_end", "top_lean"],
             "properties": {
                 "subject": {"type": "string", "enum": ["object"]},
+                "components": COMPONENTS_SCHEMA,
                 "form": {"type": "string", "enum": ["varying_sections"]},
                 "bottom_end": LOFT_PART["properties"]["bottom_end"],
                 "top_end": LOFT_PART["properties"]["top_end"],
@@ -178,6 +192,17 @@ def parts_schema(limit, part_schema=PLACED_PART):
             "parts": {"type": "array", "minItems": 1, "maxItems": limit, "items": part_schema}
         },
     }
+
+
+def component_geometry_schema(roles):
+    names = {"type": "string", "enum": [r["name"] for r in roles]}
+    shapes = [
+        shape | {"properties": shape["properties"] | {"name": names}}
+        for shape in PLACED_PART["oneOf"]
+    ]
+    result = parts_schema(len(roles), {"oneOf": shapes})
+    result["properties"]["parts"]["minItems"] = len(roles)
+    return result
 
 
 INSTRUCTIONS = """You are a precision 3D modeller. Output only JSON following the schema.
@@ -200,8 +225,10 @@ inner_diameter is the full width of the opening in metres. Torus hole faces +Z. 
 simple XY polygon of 3-32 points in [-1,1], implicitly closed, with no duplicate or
 collinear vertices. Its extents stretch to size X and Y, and it extrudes along Z.
 For a vase, bottle or other turned solid, use lathe. Its outline
-is the closed wall cross-section [radius, height], both in [0,1], before rotation
-around Z. For a sculpted asymmetrical body use loft. Specify the bottom_end and top_end
+is a wall cross-section with named radius and height, both in [0,1], before rotation
+around Z. Trace only the nonnegative radial half-plane. For a solid, a monotonic outside
+meridian ending on radius zero can be closed automatically to a flat base. For a hollow
+vessel include both its outside and inside wall. For a sculpted asymmetrical body use loft. Specify the bottom_end and top_end
 separately: flat (level end face), pointed (sharp tip), or rounded (elliptical dome).
 The mesher completes each rounded or pointed end at the last ring. Design elliptical sections from
 height 0 (bottom) to height 1 (top), strictly increasing. In section coordinates
@@ -239,6 +266,22 @@ A cloak of unspecified length reaches the knees. Convert centimetres to metres.
 Example for a slim 165 cm tall human with outstretched arms, a short hoodless cape:
 {"subject":"character","accessories":[],"character":{"height_m":1.65,"build":"slim","pose":"arms_out","cloak":"short","hood":false}}
 For anything else, even an object made for someone to use, set subject to object.
+First list components if the text identifies two or more connected pieces or distinct
+anatomical regions of the object. A single named object can have several such pieces.
+Keep each identifiable role, including the load-bearing part and the part it carries.
+Use their short, distinct names in the user's language. Preserve a stated count by listing
+the instances separately, each with a unique name. Omit excluded items. Do not
+list surface ends or empty space as separate pieces. For an undivided shell use [].
+For each component, support is 0 for the floor, -1 for free positioning, otherwise
+the 1-based index of the piece directly beneath it. Compare its horizontal width to that
+support: wider, narrower, equal, or unspecified. Use the requested proportions and
+the ordinary shape of the named object. A broad piece over a column is wider even
+if the column is itself thick. Mark the joint "joined" for a continuous or attached
+form, "resting" for stacked pieces. For a multi-component object choose form "general".
+List supporting pieces first. Example for a thin aerial attached to a box:
+[{"name":"Box","support":0,"width":"unspecified","joint":"resting"},
+{"name":"Aerial","support":1,"width":"narrower","joint":"joined"}].
+Only an item that rests on the floor gets support=0. For a side-mounted part use -1.
 Choose form "varying_sections" for a single continuous sculpted solid whose cross-sections
 taper asymmetrically or shift toward one side. Such a solid cannot be revolved about a
 fixed axis. Extract its bottom and top end independently: flat for a planar base or
@@ -319,6 +362,10 @@ def checked_prompt(prompt):
 
 def read_subject(data, detail):
     if isinstance(data, dict) and data.get("subject") == "object":
+        roles = read_components(data.get("components", []))
+        data = {k: v for k, v in data.items() if k != "components"}
+        if len(roles) > 1:
+            return None, [], {"components": roles}
         form = data.get("form", "general")
         if form == "general" and data.keys() <= {"subject", "form"}:
             return None, [], None
@@ -429,16 +476,16 @@ class Planner:
         spec = simple_character(prompt)
         if spec is not None:
             return build_character(spec, detail)
-        figure, loft_recipe = None, None
+        figure, construction = None, None
         if prompt.casefold().rstrip(".!?") not in PRIMITIVE_NAMES:
-            figure, accessories, loft_recipe = self._plan(
+            figure, accessories, construction = self._plan(
                 prompt,
                 "",
                 SUBJECT,
                 lambda data: read_subject(data, detail),
                 instructions=SUBJECT_INSTRUCTIONS,
                 num_ctx=2048,
-                num_predict=192,
+                num_predict=max(192, min(768, 2 * len(prompt))),
             )
             if figure is not None and not accessories:
                 return figure
@@ -447,6 +494,24 @@ class Planner:
                 float(value.replace(",", ".")) / METRIC_UNIT[unit.casefold()]
                 for value, unit in DIAMETER.findall(prompt)
             }
+            if construction and "components" in construction:
+                roles = construction["components"]
+                context = (
+                    "Build one individually editable part for each specified role. Copy every "
+                    "given name exactly. Preserve widths, contacts and quantities. The component "
+                    "plan is "
+                    + json.dumps(roles, ensure_ascii=False)
+                    + ".\n"
+                    + OBJECT_PLACEMENT
+                )
+                return self._plan(
+                    prompt,
+                    context,
+                    component_geometry_schema(roles),
+                    lambda data: assemble(data, detail, diameters=diameters, roles=roles),
+                    instructions=modelling,
+                )
+            loft_recipe = construction
             axis = SIGNED_CREST_AXIS.search(prompt)
             controls = dict(loft_recipe or {})
             if axis:

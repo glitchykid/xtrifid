@@ -2,7 +2,7 @@ from dataclasses import asdict, dataclass, replace
 from math import isfinite
 
 from .organic import MAX_SECTIONS, ORGANIC_SHAPES
-from .polygon import normalize_outline, simplify_outline, triangulate
+from .polygon import close_meridian, normalize_outline, simplify_outline, triangulate
 
 PRIMITIVES = ("box", "cylinder", "sphere", "cone", "torus", "extrusion", "lathe", "tube")
 SHAPES = PRIMITIVES + ORGANIC_SHAPES
@@ -90,10 +90,24 @@ class Part:
             raw = data.get("outline")
             if not isinstance(raw, (list, tuple)) or not 3 <= len(raw) <= MAX_OUTLINE:
                 raise ValueError("Для этой формы нужен контур из 3–32 точек")
-            points = tuple(vector(p, 2, -1, 1) for p in raw)
-            outline = normalize_outline(
-                simplify_outline(points) if simplify_profiles else points
-            )
+            points = []
+            for point in raw:
+                if simplify_profiles and shape == "lathe" and isinstance(point, dict):
+                    if point.keys() != {"radius", "height"}:
+                        raise ValueError("Нужны радиус и высота профиля вращения")
+                    points.append(vector([point["radius"], point["height"]], 2, 0, 1))
+                else:
+                    points.append(vector(point, 2, -1, 1))
+            points = tuple(points)
+            if simplify_profiles:
+                if shape == "lathe":
+                    points = close_meridian(
+                        points, named_surface=all(isinstance(p, dict) for p in raw)
+                    )
+                points = simplify_outline(points)
+                if len(points) > MAX_OUTLINE:
+                    raise ValueError("Профилю нужно свободное место для вершины на оси")
+            outline = normalize_outline(points)
             if shape == "lathe":
                 axis = [i for i, (r, _) in enumerate(outline) if r == 0]
                 if any(r < 0 for r, z in outline) or (

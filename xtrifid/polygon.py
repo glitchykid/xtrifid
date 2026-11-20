@@ -1,5 +1,7 @@
 """Validate and triangulate a simple XY outline, including concave silhouettes."""
 
+from math import isclose
+
 EPS = 1e-9
 
 
@@ -33,9 +35,11 @@ def simplify_outline(points):
     while len(points) > 3:
         for i, middle in enumerate(points):
             previous, following = points[i - 1], points[(i + 1) % len(points)]
+            vx, vy = middle[0] - previous[0], middle[1] - previous[1]
+            wx, wy = following[0] - previous[0], following[1] - previous[1]
             if (
                 previous != following
-                and turn(previous, middle, following) == 0
+                and isclose(vx * wy, vy * wx, rel_tol=1e-12)
                 and on_segment(previous, following, middle)
             ):
                 points.pop(i)
@@ -43,6 +47,24 @@ def simplify_outline(points):
         else:
             break
     return tuple(points)
+
+
+def close_meridian(points, *, named_surface=False):
+    """Close an outside meridian with radial end faces; leave returning wall paths intact."""
+    radii = [r for r, _ in points]
+    heights = [z for _, z in points]
+    if named_surface and all(r > 0 for r in radii):
+        steps = [b - a for a, b in zip(heights, heights[1:])]
+        if all(s > 0 for s in steps) or all(s < 0 for s in steps):
+            return (*points, (0, heights[-1]), (0, heights[0]))
+    if radii.count(0) != 1 or 0 not in (radii[0], radii[-1]):
+        return points
+    if heights[0] == heights[-1] or not (
+        heights == sorted(heights) or heights == sorted(heights, reverse=True)
+    ):
+        return points
+    flat_z = heights[0] if radii[-1] == 0 else heights[-1]
+    return (*points, (0, flat_z))
 
 
 def normalize_outline(points):

@@ -170,9 +170,9 @@ def rotation_matrix(rotation):
     return np.asarray(rz) @ ry @ rx
 
 
-def height_bounds(part, detail):
-    """Evaluate only vertical extrema for support placement, without tessellating a scene."""
-    axis = rotation_matrix(part.rotation)[2] * part.size
+def axis_bounds(part, detail, dimension):
+    """Project a single part on a world axis without allocating its mesh."""
+    axis = rotation_matrix(part.rotation)[dimension] * part.size
     if part.shape in ("box", "extrusion"):
         projected = unit_profile(part) @ axis[:2]
         half = abs(axis[2]) / 2
@@ -199,7 +199,11 @@ def height_bounds(part, detail):
         radius, z = np.asarray(radial_profile(part, n)).T
         lo = (radius * xy.min() + z * axis[2]).min()
         hi = (radius * xy.max() + z * axis[2]).max()
-    return float(lo + part.center[2]), float(hi + part.center[2])
+    return float(lo + part.center[dimension]), float(hi + part.center[dimension])
+
+
+def height_bounds(part, detail):
+    return axis_bounds(part, detail, 2)
 
 
 def build(part, mode, detail="medium"):
