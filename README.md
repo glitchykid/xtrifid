@@ -2,7 +2,7 @@
 
 # Xtrifid
 
-Describe a prop or a person, inspect the 3D mesh in GTK and revise individual parts. Xtrifid builds static, editable geometry in metres. The interface is in Russian.
+Build editable 3D models from text or image references in GTK. Inspect the geometry, simulate cloth, hair and liquids, and design colour textures for individual parts. Dimensions are in metres. The interface is in Russian.
 
 ## Run the Linux executable
 
@@ -42,6 +42,28 @@ The launcher starts Ollama and opens the studio. Use **Скачать модел
 3. Change the selected part’s dimensions, position or rotation with **Применить значения**. For a person, open **Анатомия и поза** to choose a neutral, male or female adult physique, set a pose, or resize individual regions including the ears, nose, lips and chin. Click **Применить к телу**. **Изменить деталь** applies a text edit and **Отменить действие** undoes the last change.
 4. **Сохранить** writes an editable `.xtri` project. **Открыть** restores it. **Экспорт OBJ** writes the current mesh. The executable saves directly to the folder you choose. In Docker, choose `/exports` to keep the file in the host’s `./exports` directory.
 
+## Shape and surface
+
+**Low Poly** selects a faceted style independently of the topology profile and detail level. Curved primitives use fewer segments. Smooth shading returns when you clear the option. Planar faces and baked frames retain their topology. The segment counts in the profile table apply to the standard style.
+
+For a branching organic form, describe a trunk, limbs, proportions and directions, for example a coral with three tapering branches. In **Узлы формы**, select a named node and edit its local position or radius. Connected branches share a closed surface.
+
+## Simulation
+
+Select the supporting object and expand **Физика**. Choose cloth, hair, water surface or volumetric liquid. Cloth drapes over the selected object, and a selected cloak keeps its shoulder attachment. Hair uses anchored strands. The water surface models waves in a rectangular basin. Volumetric liquid drops onto the object and spreads under gravity.
+
+Set wind and gravity, press **Воспроизвести**, pause or scrub the six-second timeline (180 steps). **Запечь кадр в модель** keeps the visible geometry in the project for OBJ export. A cloak is replaced by its deformed mesh. Other effects add a part. Undo restores the scene. Collisions use simplified shapes. Playback speed depends on detail and available CPU. Save a baked frame to keep it after closing the project.
+
+## Textures
+
+In **Текстура детали**, choose a material, colours, motif, scale, seed and resolution (128–1024 px). **Назначить** generates the diffuse colour map offline. **Создать по описанию (ИИ)** uses Ollama to choose a recipe from free text, such as blue glazed ceramic with white spots. **Новый вариант** changes the seed. The project stores the recipe. Keep the exported OBJ together with the adjacent `xtrifid-materials-…` directory containing its MTL and PNG files.
+
+## Models from reference images
+
+Choose a detail level and click **По референсам…**. In **Силуэты**, select a front PNG or JPEG, optionally a right view of the same object. Use transparent or uniform backgrounds and straight-on views. The white preview shows the extracted mask. Set the height in metres. A second view sets the depth from its proportions. With one view, the default depth is 55% of the width and can be overridden. For curved subjects, **Округлить сечения** estimates rounded cross-sections and the thickness of thin features. **Силуэты модели** lets you add or erase pixels, then rebuild the volume with **Применить силуэты**.
+
+For ordinary photos choose **Фото с ИИ**. The selected Ollama vision model receives reduced images and builds an approximate editable scene from the visible subject. An optional text hint identifies the subject. Hidden surfaces are inferred. Silhouette reconstruction works offline without weights. Each image may be up to 16 MiB and 24 megapixels. In Docker, put images in the host's `exports/` and select them under `/exports`. The espresso example preserves the opening in the cup handle. It approximates the bowl of the spoon as a flat oval. [Photograph, project and OBJ](https://github.com/glitchykid/xtrifid/releases/download/v0.6.0/photo-example.zip)
+
 ## Edit a corner or rim
 
 Select a part and expand **Контур детали**. Click a point on the section drawing or choose its number with **Вершина**. The 3D view highlights the corresponding edge, circular rim or pole. Drag the point, enter its two local coordinates in metres and click **Применить координаты**, or enter a text instruction such as “Increase the radius of this point by 5 mm and keep its height.”
@@ -59,13 +81,13 @@ For a curved shell, open **Поперечные сечения**. Choose a ring,
 
 The local language model can assemble up to 48 named parts and describe curved shells with elliptical sections that shift, widen and narrow along their height. Dimensions and support relationships guide placement. Its interpretation of an unfamiliar shape may require correction.
 
-The adult figure uses a MakeHuman anatomical mesh. The ears, lips, eyelids, fingers and torso belong to one continuous skin surface. The eyes have their own geometry. A plain person is unclothed. Request a cloak or hood explicitly. Select the body to adjust its proportions. OBJ exports static geometry with no materials or animation rig.
+The adult figure uses a MakeHuman anatomical mesh. The ears, lips, eyelids, fingers and torso belong to one continuous skin surface. The eyes have their own geometry. A plain person is unclothed. Request a cloak or hood explicitly. Select the body to adjust its proportions. OBJ exports the current static mesh and any assigned colour textures.
 
 ## Detail and available resources
 
-Choose low, medium or high detail yourself. The human mesh has six resolutions across the two profiles. A project remembers your choice. Versions 1 and 2 remain readable. Basic figure prompts work offline. Free-form descriptions and text edits require Ollama weights.
+Choose low, medium or high detail yourself. The human mesh has six resolutions across the two profiles. A project remembers your choice. Files from versions 1–3 remain readable. New projects use format 4. Basic figure prompts work offline. Free-form descriptions and text edits require Ollama weights.
 
-Editable examples · [Person](https://github.com/glitchykid/xtrifid/releases/download/v0.5.0/human.xtri) · [Mouse shell](https://github.com/glitchykid/xtrifid/releases/download/v0.5.0/mouse-shell.xtri) · [Tabletop mirror](https://github.com/glitchykid/xtrifid/releases/download/v0.5.0/table-mirror.xtri)
+Editable examples · [Person](https://github.com/glitchykid/xtrifid/releases/download/v0.5.0/human.xtri) · [Mouse shell](https://github.com/glitchykid/xtrifid/releases/download/v0.5.0/mouse-shell.xtri) · [Tabletop mirror](https://github.com/glitchykid/xtrifid/releases/download/v0.5.0/table-mirror.xtri) · [Coral](https://github.com/glitchykid/xtrifid/releases/download/v0.6.0/coral.xtri) · [Physics](https://github.com/glitchykid/xtrifid/releases/download/v0.6.0/physics-examples.zip) · [Textured vase](https://github.com/glitchykid/xtrifid/releases/download/v0.6.0/textured-vase.zip) · [Reference images and teapot](https://github.com/glitchykid/xtrifid/releases/download/v0.6.0/reference-example.zip)
 
 Before preview or export, Xtrifid estimates triangle count against available RAM and Linux container limits. It reserves memory for the desktop and caps each scene at 150,000 triangles after triangulation. If the requested level exceeds the current budget, the previous scene stays available. Choose a lower level or Game Ready. When opening a saved project, you can accept a level that fits. Inference is limited separately by model size, memory, CPU threads and context length. Other applications can still consume system resources.
 
