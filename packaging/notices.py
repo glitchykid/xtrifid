@@ -32,6 +32,8 @@ with (
     )
     archive.add("/opt/ollama/licenses", "ollama", filter=reproducible_header)
     archive.add("packaging/OLLAMA-LICENSE", "ollama/LICENSE", filter=reproducible_header)
+    for notice in sorted(Path("xtrifid/assets").glob("*.md")):
+        archive.add(notice, f"anatomy/{notice.name}", filter=reproducible_header)
     versions = "Ubuntu build environment\n" + versions + "\nPyPI build environment\n"
     for dist in sorted(
         distributions(path=[sysconfig.get_path("purelib")]), key=lambda d: d.metadata["Name"]

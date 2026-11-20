@@ -1,7 +1,7 @@
 """GTK OpenGL viewport. Display lighting and grid are never written to the asset."""
 
 import ctypes
-from math import cos, sin
+from math import asin, atan2, cos, sin
 
 import numpy as np
 from OpenGL import GL
@@ -10,7 +10,7 @@ from OpenGL.raw.GL.VERSION.GL_2_0 import glVertexAttribPointer
 
 from xtrifid.gtk import Gdk, Gtk
 
-from .geometry import triangles
+from .geometry import rotation_matrix, triangles
 
 VERT = """#version 330 core
 layout(location=0) in vec3 position;
@@ -24,6 +24,7 @@ FRAG = """#version 330 core
 in vec3 n;
 flat in int id;
 uniform int selected;
+uniform int portrait;
 uniform int passKind;
 out vec4 color;
 void main(){
@@ -34,7 +35,7 @@ void main(){
     float key=max(dot(normal,normalize(vec3(-.4,-.6,1.))),0.);
     float fill=max(dot(normal,normalize(vec3(.6,.7,.3))),0.);
     float light=.43+.38*key+.19*fill;
-    vec3 base=id==selected?vec3(.52,.86,.82):vec3(.77,.80,.88);
+    vec3 base=id==selected?(portrait==1?vec3(.84,.82,.77):vec3(.52,.86,.82)):vec3(.77,.80,.88);
     color=vec4(base*light,1);
 }"""
 
@@ -105,7 +106,7 @@ class Viewport(Gtk.GLArea):
         keys.connect("key-pressed", self.key)
         self.add_controller(keys)
 
-    def set_meshes(self, meshes):
+    def set_meshes(self, meshes, parts=()):
         if meshes:
             points = np.concatenate([mesh.vertices for mesh in meshes])
             lo, hi = points.min(axis=0), points.max(axis=0)
@@ -116,6 +117,23 @@ class Viewport(Gtk.GLArea):
             center = np.zeros(3)
             radius = 1
             floor = -0.5
+        frames = []
+        for mesh, part in zip(meshes, parts):
+            vertices = mesh.vertices
+            direction = None
+            if part.shape == "human":
+                axes = rotation_matrix(part.rotation)
+                height = (vertices - part.center) @ axes[:, 2]
+                vertices = vertices[height >= height.max() - 0.145 * np.ptp(height)]
+                direction = -axes[:, 1]
+            lo, hi = vertices.min(axis=0), vertices.max(axis=0)
+            frames.append(
+                (
+                    ((hi + lo) / 2 - center) / radius,
+                    np.linalg.norm(hi - lo) / (2 * radius),
+                    direction,
+                )
+            )
         surface, wire, owners = batches(meshes, center, radius)
         grid = []
         for i in range(-12, 13):
@@ -126,14 +144,40 @@ class Viewport(Gtk.GLArea):
         # Keep the pick coordinates as a view of the same storage sent to OpenGL.
         pick_points = buffer[: len(surface), :3].reshape(-1, 3, 3)
         self.center, self.radius = center, radius
+        self.frames = frames
         self.counts = len(surface), len(wire), len(grid)
         self.buffer, self.owners, self.pick_points = buffer, owners, pick_points
+        if getattr(self, "focused", None) is not None:
+            if self.focused < len(frames):
+                self.target = frames[self.focused][0]
+            else:
+                self.reset_camera()
         self.dirty = True
         self.queue_render()
 
     def reset_camera(self):
+        self.focused = None
+        self.target = np.zeros(3)
+        figure = next(
+            (direction for _, _, direction in self.frames if direction is not None), None
+        )
         self.yaw, self.pitch, self.zoom = 0.65, 0.42, 1.0
+        if figure is not None:
+            self.yaw = atan2(figure[0], -figure[1]) + 0.14
+            self.pitch = 0.06
         self.queue_render()
+
+    def focus_selected(self):
+        if not 0 <= self.selected < len(self.frames):
+            return False
+        self.focused = self.selected
+        self.target, extent, direction = self.frames[self.selected]
+        self.zoom = min(32, 1 / max(0.001, extent))
+        if direction is not None:
+            self.yaw = atan2(direction[0], -direction[1])
+            self.pitch = asin(np.clip(direction[2], -1, 1))
+        self.queue_render()
+        return True
 
     def set_guide(self, points=()):
         self.guide = np.zeros((len(points), 7), dtype=np.float32)
@@ -157,14 +201,17 @@ class Viewport(Gtk.GLArea):
         )
 
     def screen_position(self, world):
-        x, y, _ = self.matrix() @ ((np.asarray(world) - self.center) / self.radius)
+        x, y, _ = self.matrix() @ (
+            (np.asarray(world) - self.center) / self.radius - self.target
+        )
         return (x + 1) * self.get_width() / 2, (1 - y) * self.get_height() / 2
 
     def pick(self, x, y):
         if not len(self.owners):
             return None
         p = np.array([2 * x / self.get_width() - 1, 1 - 2 * y / self.get_height()])
-        a, b, c = (self.pick_points @ self.matrix().T).transpose(1, 0, 2)
+        matrix = self.matrix()
+        a, b, c = (self.pick_points @ matrix.T - matrix @ self.target).transpose(1, 0, 2)
         ab, ac = b - a, c - a
         d = p - a[:, :2]
         det = ab[:, 0] * ac[:, 1] - ab[:, 1] * ac[:, 0]
@@ -195,7 +242,7 @@ class Viewport(Gtk.GLArea):
                 self.on_pick(which)
 
     def zoom_by(self, factor):
-        self.zoom = min(8, max(0.2, self.zoom * factor))
+        self.zoom = min(32, max(0.2, self.zoom * factor))
         self.queue_render()
         return True
 
@@ -204,6 +251,8 @@ class Viewport(Gtk.GLArea):
             return self.zoom_by(0.85 if key == Gdk.KEY_minus else 1.15)
         if key == Gdk.KEY_Home:
             self.reset_camera()
+        elif key in (Gdk.KEY_f, Gdk.KEY_F):
+            return self.focus_selected()
         elif key in (Gdk.KEY_Left, Gdk.KEY_Right):
             self.yaw += 0.12 if key == Gdk.KEY_Right else -0.12
         elif key in (Gdk.KEY_Up, Gdk.KEY_Down):
@@ -228,7 +277,7 @@ class Viewport(Gtk.GLArea):
             glVertexAttribPointer(i, size, GL.GL_FLOAT, False, 28, ctypes.c_void_p(offset))
         self.uniforms = {
             name: GL.glGetUniformLocation(self.program, name)
-            for name in ("camera", "passKind", "selected")
+            for name in ("camera", "passKind", "selected", "portrait")
         }
         self.dirty = True
 
@@ -264,9 +313,15 @@ class Viewport(Gtk.GLArea):
                 self.guide_dirty = False
             matrix = np.eye(4, dtype=np.float32)
             matrix[:3, :3] = self.matrix()
+            matrix[:3, 3] = -matrix[:3, :3] @ self.target
             GL.glUseProgram(self.program)
             GL.glUniformMatrix4fv(self.uniforms["camera"], 1, True, matrix)
             GL.glUniform1i(self.uniforms["selected"], self.selected)
+            human = (
+                0 <= self.selected < len(self.frames)
+                and self.frames[self.selected][2] is not None
+            )
+            GL.glUniform1i(self.uniforms["portrait"], int(human))
             GL.glEnable(GL.GL_DEPTH_TEST)
             GL.glClearColor(0.068, 0.081, 0.105, 1)
             GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)

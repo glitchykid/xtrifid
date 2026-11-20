@@ -23,7 +23,7 @@ def atomic_write(path, write):
 
 
 def save_project(path, scene, mode):
-    payload = {"version": 2, "mode": mode, **scene.data()}
+    payload = {"version": 3, "mode": mode, **scene.data()}
     atomic_write(path, lambda file: json.dump(payload, file, ensure_ascii=False, indent=2))
 
 
@@ -36,7 +36,7 @@ def load_project(path):
     if (
         not isinstance(data, dict)
         or type(data.get("version")) is not int
-        or data["version"] not in (1, 2)
+        or data["version"] not in (1, 2, 3)
         or data.get("mode") not in MODES
     ):
         raise ValueError("Неизвестная версия или профиль проекта")

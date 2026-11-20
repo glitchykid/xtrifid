@@ -7,14 +7,32 @@ from dataclasses import replace
 from math import ulp
 
 from .assembly import assemble
-from .character import CHARACTER_SCHEMA, build_character
-from .model import DETAILS, MAX_LENGTH, MAX_OUTLINE, MAX_PARTS, MIN_SIZE, PRIMITIVES, Part
+from .character import (
+    BODY_SCALES_SCHEMA,
+    CHARACTER_SCHEMA,
+    build_character,
+    character_anchor,
+    with_character_pose,
+)
+from .construction import CAP_STEPS, CYLINDER_AXES, LOFT_ENDS, LOFT_LEANS
+from .model import (
+    DETAILS,
+    LOFT_COORDS,
+    MAX_LENGTH,
+    MAX_OUTLINE,
+    MAX_PARTS,
+    MIN_SIZE,
+    PRIMITIVES,
+    Part,
+)
 from .ollama import DEFAULT_URL, PlannerError, post_chat
 from .ollama import ModelMissing as ModelMissing
+from .organic import MAX_SECTIONS
 from .profile import move_profile_point, profile_points
 
 MAX_PROMPT = 2000
 MAX_ACCESSORY_DESCRIPTION = 160
+OBJECT_SHAPES = (*PRIMITIVES, "loft")
 
 
 def numbers(length, low, high):
@@ -31,11 +49,29 @@ PART = {
     "additionalProperties": False,
     "properties": {
         "name": {"type": "string", "minLength": 1, "maxLength": 80},
-        "shape": {"type": "string", "enum": list(PRIMITIVES)},
+        "shape": {"type": "string", "enum": list(OBJECT_SHAPES)},
         "size": numbers(3, MIN_SIZE, MAX_LENGTH),
         "center": numbers(3, -MAX_LENGTH, MAX_LENGTH),
         "rotation": numbers(3, -360, 360),
         "inner_diameter": {"type": "number", "minimum": 0.000001, "maximum": MAX_LENGTH},
+        "sections": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": MAX_SECTIONS,
+            "items": {
+                "type": "object",
+                "properties": {
+                    key: {
+                        "type": "number",
+                        "minimum": -1 if key.startswith("offset") else 0,
+                        "maximum": 1,
+                    }
+                    for key in LOFT_COORDS
+                },
+                "required": list(LOFT_COORDS),
+                "additionalProperties": False,
+            },
+        },
         "outline": {
             "type": "array",
             "minItems": 3,
@@ -51,6 +87,21 @@ def placed_schema(shapes, extra=()):
     keys = PART["required"] + list(extra)
     properties = {key: PART["properties"][key] for key in keys}
     properties["shape"] = {"type": "string", "enum": shapes}
+    if shapes == ["cylinder"]:
+        # Establish the world direction before the model fills in local angles.
+        properties = {
+            "name": properties["name"],
+            "shape": properties["shape"],
+            "world_size": numbers(3, MIN_SIZE, MAX_LENGTH),
+            "axis": {"type": "string", "enum": [*CYLINDER_AXES, "custom"]},
+            **properties,
+        }
+    if shapes == ["loft"]:
+        for end in ("bottom_end", "top_end"):
+            properties[end] = {"type": "string", "enum": list(LOFT_ENDS)}
+        properties["sections"] = properties["sections"] | {
+            "maxItems": MAX_SECTIONS - 2 * CAP_STEPS
+        }
     properties["support"] = {"type": "integer", "minimum": -1, "maximum": MAX_PARTS}
     return {
         "type": "object",
@@ -61,11 +112,16 @@ def placed_schema(shapes, extra=()):
 
 
 PROFILE_SHAPES = ("extrusion", "lathe")
+LOFT_PART = placed_schema(["loft"], ("sections",))
 PLACED_PART = {
     "oneOf": [
-        placed_schema([s for s in PRIMITIVES if s not in (*PROFILE_SHAPES, "tube")]),
+        placed_schema(
+            [s for s in PRIMITIVES if s not in (*PROFILE_SHAPES, "tube", "cylinder")]
+        ),
+        placed_schema(["cylinder"]),
         placed_schema(list(PROFILE_SHAPES), ("outline",)),
         placed_schema(["tube"], ("inner_diameter",)),
+        LOFT_PART,
     ]
 }
 SUBJECT = {
@@ -91,20 +147,35 @@ SUBJECT = {
         {
             "type": "object",
             "additionalProperties": False,
-            "required": ["subject"],
-            "properties": {"subject": {"type": "string", "enum": ["object"]}},
+            "required": ["subject", "form"],
+            "properties": {
+                "subject": {"type": "string", "enum": ["object"]},
+                "form": {"type": "string", "enum": ["general"]},
+            },
+        },
+        {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["subject", "form", "bottom_end", "top_end", "top_lean"],
+            "properties": {
+                "subject": {"type": "string", "enum": ["object"]},
+                "form": {"type": "string", "enum": ["varying_sections"]},
+                "bottom_end": LOFT_PART["properties"]["bottom_end"],
+                "top_end": LOFT_PART["properties"]["top_end"],
+                "top_lean": {"type": "string", "enum": ["as_drawn", *LOFT_LEANS]},
+            },
         },
     ]
 }
 
 
-def parts_schema(limit):
+def parts_schema(limit, part_schema=PLACED_PART):
     return {
         "type": "object",
         "additionalProperties": False,
         "required": ["parts"],
         "properties": {
-            "parts": {"type": "array", "minItems": 1, "maxItems": limit, "items": PLACED_PART}
+            "parts": {"type": "array", "minItems": 1, "maxItems": limit, "items": part_schema}
         },
     }
 
@@ -116,29 +187,65 @@ Respect quantities, dimensions, relative placement, negative space and symmetry.
 Model the requested object in recognisable separate named pieces, with real dimensions
 and sensible connections. Put the base on z=0 unless asked otherwise. Name each piece
 uniquely in the language of the user. Sphere can be an ellipsoid. Cone points along +Z.
-A cylindrical item has size [outer diameter, outer diameter, length] in metres.
+For any solid circular or elliptical disk use cylinder, size [diameter X, diameter Y,
+thickness] in metres. Its disk starts in the XY plane; rotate 90 degrees about X for XZ.
+For a cylinder world_size is [world width X, world depth Y, world height Z] of the
+finished piece. Copy these dimensions directly from the request when given. The
+cylinder axis is its central rod direction or its disk's face normal. Set axis
+to vertical_z for a standing rod or a horizontal plate, depth_y for a front-facing
+disk in XZ, width_x for a side-facing disk in YZ. For an oblique axis use custom and
+supply the Euler rotation. The same shape generates rods by increasing its local Z dimension.
 For a bushing, hollow straight pipe, sleeve, or flat washer use tube. For tube,
 inner_diameter is the full width of the opening in metres. Torus hole faces +Z. For custom silhouettes use extrusion: outline is an ordered
 simple XY polygon of 3-32 points in [-1,1], implicitly closed, with no duplicate or
 collinear vertices. Its extents stretch to size X and Y, and it extrudes along Z.
 For a vase, bottle or other turned solid, use lathe. Its outline
 is the closed wall cross-section [radius, height], both in [0,1], before rotation
-around Z.
-Omit outline for other shapes. No materials, ground plane or surrounding scenery."""
+around Z. For a sculpted asymmetrical body use loft. Specify the bottom_end and top_end
+separately: flat (level end face), pointed (sharp tip), or rounded (elliptical dome).
+The mesher completes each rounded or pointed end at the last ring. Design elliptical sections from
+height 0 (bottom) to height 1 (top), strictly increasing. In section coordinates
+radius_x and radius_y are half-width and half-depth, normalized (about 0.5 at full size).
+offset_right and offset_back move a ring towards +X and +Y, respectively; negative values
+move left and forward. Each value is a fraction of the part's envelope, not metres.
+For a flat end use positive radii. For a rounded end, taper the last few rings into
+one point with radius_x=0 and radius_y=0. Only endpoints can be points.
+The completed loft stretches to the specified size. Rotate the finished loft
+if its main axis isn't vertical. Use sections only for loft, outline only for lathe or
+extrusion. Preserve every requested feature, count and dimension at all detail levels.
+No materials, ground plane or surrounding scenery."""
+
+DETAIL_BRIEFS = {
+    "low": "Use the fewest pieces and silhouette landmarks that retain the specified features.",
+    "medium": "Describe the major contours, changes of curvature and distinct functional pieces.",
+    "high": "Resolve secondary contours, transitions and edge details visible in the object. "
+    "Place extra sections where curvature changes, not uniformly on straight spans.",
+}
 
 SUBJECT_INSTRUCTIONS = """Identify what the user's text asks to model. Return a single JSON object.
 For a human, traveller, actor or other human figure, set subject to character.
-List each additional item the figure holds, carries or wears in accessories. Preserve
+List only explicitly requested items the figure holds, carries or wears in accessories. Preserve
 sizes and attachment sites using the user's words. For example, a person carrying a bag
 on one shoulder has accessories ["сумка через плечо"]. Ordinary anatomy, the cloak and
 its hood are included in character. When no extra object was requested, use []. Specify full
 height in metres, build (slim/average/broad), pose (standing/walking/arms_out),
 cloak length (none/short/knee/ankle), and whether its hood is raised (true/false).
 Defaults are 1.75 m, average build, standing upright, no cloak and no hood.
+Use physique male for an explicitly requested man, female for a woman, otherwise neutral.
+Only if explicitly specified, put multipliers for individual anatomical regions in
+body_scales (1.0 is the reference anatomy). Face regions include head, ears, nose, lips
+and chin. Use build alone for an overall broad or slim build.
 A cloak of unspecified length reaches the knees. Convert centimetres to metres.
 Example for a slim 165 cm tall human with outstretched arms, a short hoodless cape:
 {"subject":"character","accessories":[],"character":{"height_m":1.65,"build":"slim","pose":"arms_out","cloak":"short","hood":false}}
-For anything else, even an object made for someone to use, return {"subject":"object"}."""
+For anything else, even an object made for someone to use, set subject to object.
+Choose form "varying_sections" for a single continuous sculpted solid whose cross-sections
+taper asymmetrically or shift toward one side. Such a solid cannot be revolved about a
+fixed axis. Extract its bottom and top end independently: flat for a planar base or
+cut face, rounded for a dome, pointed for a sharp tip. For top_lean copy an explicit displacement
+of the highest point: back (+Y), front (-Y), right (+X), left (-X); otherwise as_drawn.
+Choose "general" for assemblies, objects with holes or branches, turned
+objects, or shapes with a constant outline along their length."""
 
 OBJECT_PLACEMENT = """Build objects from the ground up. Each part's support locates its underside:
 0 = on the floor. A positive value is the 1-based index of its supporting part.
@@ -163,16 +270,29 @@ PRIMITIVE_NAMES = {
 SIMPLE_CHARACTER = (
     re.compile(
         r"(?:пожалуйста,? )?(?:(?:сделай|создай|построй|смоделируй|сгенерируй) )?"
-        r"(?:фигур[ау] )?человека?"
+        r"(?:фигур[ау] )?(?P<body>человека?|мужчин[ау]|женщин[ау])"
         r"(?:(?P<cloak> с плащом| в плаще)(?: (?:с (?P<hood>капюшоном)|без капюшона))?"
         r"| без плаща)?"
     ),
     re.compile(
-        r"(?:please,? )?(?:(?:create|make|model|generate) )?(?:a )?(?:human|person)"
+        r"(?:please,? )?(?:(?:create|make|model|generate) )?(?:a )?(?P<body>human|person|man|woman)"
         r"(?:(?P<cloak> (?:with|in|wearing) a (?:cape|cloak))"
         r"(?: (?:with a (?P<hood>hood)|without a hood))?| without a (?:cape|cloak))?"
     ),
 )
+
+SIGNED_CREST_AXIS = re.compile(
+    r"(?:высш\w* точк\w*|верхушк\w*|вершин\w*|highest point|crest|apex|tip)"
+    r"[^.!?;()\n]{0,40}(?:смещ\w*|сдвин\w*|наклон\w*|offset|shift\w*|lean\w*)"
+    r"[^.!?;()\n]{0,32}\(\s*([+−-])\s*([xy])\s*\)",
+    re.IGNORECASE,
+)
+DIAMETER = re.compile(
+    r"(?:\bдиаметр(?:ом|а)?\b|\bdiameter(?: of)?\b|[ø⌀])\s*[:=]?\s*"
+    r"(\d+(?:[.,]\d+)?)\s*(мм|см|м|mm|cm|m)\b",
+    re.IGNORECASE,
+)
+METRIC_UNIT = {"мм": 1000, "mm": 1000, "см": 100, "cm": 100, "м": 1, "m": 1}
 
 
 def simple_character(prompt):
@@ -182,7 +302,12 @@ def simple_character(prompt):
     for pattern in SIMPLE_CHARACTER:
         match = pattern.fullmatch(text)
         if match:
-            return {"cloak": "knee" if match["cloak"] else "none", "hood": bool(match["hood"])}
+            spec = {"cloak": "knee" if match["cloak"] else "none", "hood": bool(match["hood"])}
+            if match["body"] in ("мужчина", "мужчину", "man"):
+                spec["physique"] = "male"
+            elif match["body"] in ("женщина", "женщину", "woman"):
+                spec["physique"] = "female"
+            return spec
     return None
 
 
@@ -193,8 +318,20 @@ def checked_prompt(prompt):
 
 
 def read_subject(data, detail):
-    if data == {"subject": "object"}:
-        return None, []
+    if isinstance(data, dict) and data.get("subject") == "object":
+        form = data.get("form", "general")
+        if form == "general" and data.keys() <= {"subject", "form"}:
+            return None, [], None
+        loft_keys = {"subject", "form", "bottom_end", "top_end"}
+        if form == "varying_sections" and data.keys() - {"top_lean"} == loft_keys:
+            ends = {key: data[key] for key in ("bottom_end", "top_end")}
+            lean = data.get("top_lean", "as_drawn")
+            if all(end in LOFT_ENDS for end in ends.values()) and lean in (
+                "as_drawn",
+                *LOFT_LEANS,
+            ):
+                return None, [], ends | {"top_lean": lean}
+        raise ValueError("Expected a general object or a single loft with both end types")
     if not isinstance(data, dict) or data.keys() != {"subject", "character", "accessories"}:
         raise ValueError(
             "A figure requires a subject, its character recipe and its accessory list"
@@ -214,9 +351,9 @@ def read_subject(data, detail):
     ):
         raise ValueError("List short descriptions of the requested accessories")
     spec = data["character"]
-    if not isinstance(spec, dict) or spec.keys() != CHARACTER_SCHEMA["properties"].keys():
+    if not isinstance(spec, dict) or not set(CHARACTER_SCHEMA["required"]) <= spec.keys():
         raise ValueError("A character needs height_m, build, pose, cloak and hood")
-    return build_character(spec, detail), accessories
+    return build_character(spec, detail), accessories, None
 
 
 POINT_INSTRUCTIONS = """Translate the user's request to an operation on each local profile axis.
@@ -288,12 +425,13 @@ class Planner:
         prompt = checked_prompt(prompt)
         if detail not in DETAILS:
             raise ValueError("Выберите уровень детализации")
+        modelling = f"{INSTRUCTIONS}\nMesh detail: {detail}. {DETAIL_BRIEFS[detail]}"
         spec = simple_character(prompt)
         if spec is not None:
             return build_character(spec, detail)
-        figure = None
+        figure, loft_recipe = None, None
         if prompt.casefold().rstrip(".!?") not in PRIMITIVE_NAMES:
-            figure, accessories = self._plan(
+            figure, accessories, loft_recipe = self._plan(
                 prompt,
                 "",
                 SUBJECT,
@@ -305,18 +443,51 @@ class Planner:
             if figure is not None and not accessories:
                 return figure
         if figure is None:
+            diameters = {
+                float(value.replace(",", ".")) / METRIC_UNIT[unit.casefold()]
+                for value, unit in DIAMETER.findall(prompt)
+            }
+            axis = SIGNED_CREST_AXIS.search(prompt)
+            controls = dict(loft_recipe or {})
+            if axis:
+                negative, positive = (
+                    ("left", "right") if axis[2].lower() == "x" else ("front", "back")
+                )
+                controls["top_lean"] = positive if axis[1] == "+" else negative
+                controls["measured_lean"] = bool(re.search(r"\d", axis[0]))
+
+            def assemble_object(data):
+                if controls:
+                    parts = data.get("parts") if isinstance(data, dict) else None
+                    single_loft = (
+                        isinstance(parts, list)
+                        and len(parts) == 1
+                        and isinstance(parts[0], dict)
+                        and parts[0].get("shape") == "loft"
+                    )
+                    if single_loft:
+                        data = {"parts": [parts[0] | controls]}
+                    elif loft_recipe:
+                        raise ValueError("A single offset silhouette requires one loft")
+                return assemble(data, detail, diameters=diameters)
+
             return self._plan(
                 prompt,
-                OBJECT_PLACEMENT,
-                parts_schema(MAX_PARTS),
-                lambda data: assemble(data, detail),
+                (
+                    f"Build one continuous loft, preserving its end treatment {json.dumps(loft_recipe)}. "
+                    if loft_recipe
+                    else ""
+                )
+                + OBJECT_PLACEMENT,
+                parts_schema(1, LOFT_PART) if loft_recipe else parts_schema(MAX_PARTS),
+                assemble_object,
+                instructions=modelling,
             )
 
         limit = MAX_PARTS - len(figure.parts)
         anchors = {
-            p.name: [round(c, 5) for c in p.center]
-            for p in figure.parts
-            if p.name in ("Туловище", "Голова", "Кисть левая", "Кисть правая")
+            name: [round(c, 5) for c in character_anchor(figure, name)]
+            for name in ("Туловище", "Голова", "Кисть левая", "Кисть правая")
         }
         context = (
             "The body, cloak and hood are already modelled as requested. Generate only these items: "
@@ -334,25 +505,36 @@ class Planner:
             extras = assemble(data, detail)
             return replace(figure, parts=figure.parts + extras.parts)
 
-        return self._plan(prompt, context, parts_schema(limit), attach)
+        return self._plan(prompt, context, parts_schema(limit), attach, instructions=modelling)
 
     def edit(self, prompt, scene, index):
         if type(index) is not int or not 0 <= index < len(scene.parts):
             raise ValueError("Выберите существующую деталь")
         original = scene.parts[index]
         parts = scene.data()["parts"]
-        for part in parts:
-            # Loft sections are fixed anatomical controls. Dimensions and transforms
-            # suffice for this operation and fit into the constrained model context.
-            part.pop("sections", None)
+        for other, part in enumerate(parts):
+            if other != index:
+                part.pop("sections", None)
+                part.pop("outline", None)
+            elif part.get("sections"):
+                part["sections"] = [dict(zip(LOFT_COORDS, row)) for row in part["sections"]]
         context = json.dumps(
             {"parts": parts, "selected": index + 1},
             ensure_ascii=False,
             separators=(",", ":"),
         )
         editable = {k: v for k, v in PART["properties"].items() if k != "name"}
-        if original.shape not in PRIMITIVES:
-            editable["shape"] = {"type": "string", "enum": [original.shape, *PRIMITIVES]}
+        if original.shape not in OBJECT_SHAPES:
+            editable["shape"] = {"type": "string", "enum": [original.shape, *OBJECT_SHAPES]}
+        anatomy_hint = ""
+        if original.shape == "human":
+            editable["pose"] = CHARACTER_SCHEMA["properties"]["pose"]
+            editable["physique"] = CHARACTER_SCHEMA["properties"]["physique"]
+            editable["body_scales"] = BODY_SCALES_SCHEMA | {"minProperties": 1}
+            anatomy_hint = (
+                "For an anatomical region, return body_scales with just the changed regions. "
+                "Scales are relative to the base anatomy (1.0). Keep whole-body dimensions. "
+            )
         patch_schema = {
             "type": "object",
             "properties": editable,
@@ -363,7 +545,25 @@ class Planner:
         def apply_patch(patch):
             if not isinstance(patch, dict) or not patch or not patch.keys() <= editable.keys():
                 raise ValueError("Return only the changed geometry fields of the selected part")
-            updated = Part.parse(original.data() | patch)
+            if "sections" in patch and patch.get("shape", original.shape) != "loft":
+                raise ValueError("Only a loft has sections")
+            basis = original
+            if "pose" in patch:
+                if patch.get("shape", original.shape) != "human":
+                    raise ValueError("Only a human body can be posed")
+                if original.pose != patch["pose"]:
+                    basis = with_character_pose(original, patch["pose"])
+            original_data = basis.data()
+            if "body_scales" in patch:
+                scales = patch["body_scales"]
+                if (
+                    patch.get("shape", original.shape) != "human"
+                    or not isinstance(scales, dict)
+                    or not scales
+                ):
+                    raise ValueError("Expected region multipliers on the selected figure")
+                patch = patch | {"body_scales": original_data.get("body_scales", {}) | scales}
+            updated = Part.parse(original_data | patch)
             # Model decimals can echo a computed coordinate one floating-point step away.
             stable = {}
             for field in ("size", "center", "rotation"):
@@ -377,7 +577,7 @@ class Planner:
             prompt,
             "Edit only the selected 1-based part. Return only changed geometry fields. "
             "For a size-only edit return just the complete XYZ size array in metres. "
-            f"Scene: {context}\nUser request: ",
+            f"{anatomy_hint}Scene: {context}\nUser request: ",
             patch_schema,
             apply_patch,
         )

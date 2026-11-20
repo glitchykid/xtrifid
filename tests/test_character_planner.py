@@ -8,6 +8,21 @@ from xtrifid.planner import MAX_PROMPT, Planner, PlannerError
 
 
 class CharacterPlanningTests(unittest.TestCase):
+    def test_basic_explicit_physiques_work_offline_and_leave_garments_opt_in(self):
+        examples = [
+            ("Сделай мужчину", "male", False),
+            ("женщина с плащом", "female", True),
+            ("create a woman", "female", False),
+            ("a man in a cloak", "male", True),
+            ("человек", "neutral", False),
+        ]
+        with patch.object(Planner, "_chat", side_effect=AssertionError("unexpected chat")):
+            for prompt, expected, cloak in examples:
+                with self.subTest(prompt=prompt):
+                    scene = Planner().generate(prompt)
+                    self.assertEqual(scene.parts[0].physique, expected)
+                    self.assertEqual(any(p.shape == "cloak" for p in scene.parts), cloak)
+
     def setUp(self):
         self.planner = Planner()
         self.character = {
@@ -101,7 +116,7 @@ class CharacterPlanningTests(unittest.TestCase):
 
     def test_editing_anatomy_preserves_cross_sections_and_keeps_the_request_small(self):
         scene = self.planner.generate("человек в плаще")
-        torso = next(i for i, p in enumerate(scene.parts) if p.name == "Туловище")
+        torso = next(i for i, p in enumerate(scene.parts) if p.shape == "human")
         selected = scene.parts[torso]
         width, depth, height = selected.size
         with patch.object(
@@ -113,9 +128,52 @@ class CharacterPlanningTests(unittest.TestCase):
         messages, schema = chat.call_args.args
         self.assertNotIn('"sections"', messages[-1]["content"])
         self.assertIn("loft", schema["properties"]["shape"]["enum"])
-        self.assertIn("Голова", messages[-1]["content"])
+        self.assertIn(selected.name, messages[-1]["content"])
         self.assertEqual(edited.sections, selected.sections)
         self.assertEqual(edited.size, (width * 1.1, depth, height))
+
+    def test_local_anatomy_edit_preserves_an_earlier_region_scale(self):
+        scene = self.planner.generate("человек в плаще")
+        with patch.object(self.planner, "_chat", return_value='{"body_scales":{"hands":1.1}}'):
+            first = self.planner.edit("Увеличь кисти на 10 процентов", scene, 0)
+        with patch.object(
+            self.planner, "_chat", return_value='{"body_scales":{"ears":0.9}}'
+        ) as chat:
+            second = self.planner.edit(
+                "Уменьши уши на 10 процентов", scene.with_part(0, first), 0
+            )
+        self.assertIn("ears", chat.call_args.args[1]["properties"]["body_scales"]["properties"])
+        self.assertEqual(second.data()["body_scales"]["hands"], 1.1)
+        self.assertEqual(second.data()["body_scales"]["ears"], 0.9)
+        self.assertEqual(second.size, first.size)
+
+    def test_explicit_anatomical_proportions_survive_generation(self):
+        character = self.character | {
+            "cloak": "none",
+            "hood": False,
+            "body_scales": {"ears": 1.1},
+        }
+        with patch.object(
+            self.planner,
+            "_chat",
+            return_value=json.dumps(self.subject | {"character": character}),
+        ) as chat:
+            scene = self.planner.generate(
+                "Сделай шагающего человека с ушами на 10 процентов больше обычного"
+            )
+        chat.assert_called_once()
+        self.assertEqual(scene.parts[0].data()["body_scales"]["ears"], 1.1)
+        self.assertEqual(len(scene.parts), 1)
+
+    def test_pose_edit_preserves_stature_and_recomputes_the_arm_span(self):
+        from xtrifid.character import build_character
+
+        scene = self.planner.generate("человек")
+        with patch.object(self.planner, "_chat", return_value='{"pose":"arms_out"}'):
+            edited = self.planner.edit("Разведи руки в стороны", scene, 0)
+        target = build_character({"pose": "arms_out"}).parts[0]
+        for actual, expected in zip(edited.size + edited.center, target.size + target.center):
+            self.assertAlmostEqual(actual, expected)
 
     def test_invalid_part_selection_is_rejected_before_an_edit_request(self):
         scene = self.planner.generate("человек")

@@ -177,6 +177,21 @@ def height_bounds(part, detail):
         projected = unit_profile(part) @ axis[:2]
         half = abs(axis[2]) / 2
         lo, hi = projected.min() - half, projected.max() + half
+    elif part.shape == "loft":
+        # Every supported segment count includes all four extrema of an ellipse.
+        # Project the normalized rings directly without building faces or a scene.
+        z, rx, ry, cx, cy = np.asarray(part.sections).T
+        xmin, xmax = (cx - rx).min(), (cx + rx).max()
+        ymin, ymax = (cy - ry).min(), (cy + ry).max()
+        xscale = axis[0] / (xmax - xmin)
+        yscale = axis[1] / (ymax - ymin)
+        centers = (cx - (xmax + xmin) / 2) * xscale + (cy - (ymax + ymin) / 2) * yscale
+        centers += (z - 0.5) * axis[2]
+        n = radial_segments("render", detail)
+        angles = np.arange(n) * (tau / n)
+        heights = centers[:, None] + np.outer(rx * xscale, np.sin(angles))
+        heights -= np.outer(ry * yscale, np.cos(angles))
+        lo, hi = heights.min(), heights.max()
     else:
         n = radial_segments("render", detail)
         angles = np.arange(n) * (tau / n)
@@ -187,8 +202,13 @@ def height_bounds(part, detail):
     return float(lo + part.center[2]), float(hi + part.center[2])
 
 
-@lru_cache(maxsize=48)
 def build(part, mode, detail="medium"):
+    if triangle_bound(part, mode, detail) >= 4096:
+        return _build(part, mode, detail)
+    return _small_mesh(part, mode, detail)
+
+
+def _build(part, mode, detail):
     segments = radial_segments(mode, detail)
     if part.shape in ("box", "extrusion"):
         vertices, faces, smooth = prism(part)
@@ -202,3 +222,7 @@ def build(part, mode, detail="medium"):
     world = (np.asarray(vertices) * part.size) @ rotation_matrix(part.rotation).T + part.center
     world.setflags(write=False)
     return Mesh(world, tuple(faces), tuple(smooth))
+
+
+# Keep repeated controls responsive without retaining dense meshes across edits.
+_small_mesh = lru_cache(maxsize=48)(_build)

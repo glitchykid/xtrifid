@@ -189,12 +189,16 @@ def exercise(binary, work, generate):
     def expect(root, role, name, seconds=20):
         return wait_for(lambda: lookup(root, role, name), f"{role} {name}", process, seconds)
 
-    def mint_pixels():
+    def mesh_pixels(portrait):
         sample = ImageGrab.grab(xdisplay=os.environ["DISPLAY"]).crop((500, 185, 1010, 560))
+        if portrait:
+            return sum(r > 95 and r >= g >= b and r - b > 3 for r, g, b in sample.getdata())
         return sum(g > 105 and g > 1.35 * r and b > 1.3 * r for r, g, b in sample.getdata())
 
-    def preview():
-        count = wait_for(lambda: c if (c := mint_pixels()) > 1500 else 0, "3D preview", process)
+    def preview(portrait=False):
+        count = wait_for(
+            lambda: c if (c := mesh_pixels(portrait)) > 1500 else 0, "3D preview", process
+        )
         print(f"Preview: {count} mesh-coloured pixels in the viewport", flush=True)
 
     def export(name):
@@ -221,8 +225,9 @@ def exercise(binary, work, generate):
         field = expect(frame, at.ROLE_TEXT, "Описание новой модели")
         field.queryEditableText().setTextContents("сделай человека с плащом")
         click(expect(frame, at.ROLE_PUSH_BUTTON, "Создать модель"))
-        expect(frame, at.ROLE_COMBO_BOX, "1. Туловище")
-        preview()
+        expect(frame, at.ROLE_COMBO_BOX, "1. Человек")
+        click(expect(frame, at.ROLE_PUSH_BUTTON, "К лицу"))
+        preview(portrait=True)
         figure = export("character.obj")
         size = check_obj(figure)
         assert size[2] == 1.75 and any(

@@ -27,6 +27,24 @@ def intersects(a, b, c, d):
     )
 
 
+def simplify_outline(points):
+    """Drop only redundant samples on the same straight segment."""
+    points = list(points)
+    while len(points) > 3:
+        for i, middle in enumerate(points):
+            previous, following = points[i - 1], points[(i + 1) % len(points)]
+            if (
+                previous != following
+                and turn(previous, middle, following) == 0
+                and on_segment(previous, following, middle)
+            ):
+                points.pop(i)
+                break
+        else:
+            break
+    return tuple(points)
+
+
 def normalize_outline(points):
     count = len(points)
     if len(set(points)) != count:

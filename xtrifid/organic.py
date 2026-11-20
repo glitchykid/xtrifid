@@ -4,9 +4,11 @@ from math import cos, exp, pi, sin, tau
 
 import numpy as np
 
+from .human_asset import rest_triangle_count
+from .human_body import posed_mesh
 from .rings import bridge
 
-ORGANIC_SHAPES = ("loft", "head", "cloak", "hood")
+ORGANIC_SHAPES = ("loft", "head", "cloak", "hood", "human")
 MAX_SECTIONS = 24
 
 # Height, half-width, half-depth, lateral offset and sagittal offset.
@@ -181,6 +183,8 @@ def _hood(n):
 
 
 def organic_triangle_bound(part, segments):
+    if part.shape == "human":
+        return rest_triangle_count(segments)
     if part.shape == "cloak":
         spans = segments + 8
         return 4 * (len(CLOAK) * spans + len(CLOAK) - 1)
@@ -191,6 +195,8 @@ def organic_triangle_bound(part, segments):
 
 
 def organic_mesh(part, segments):
+    if part.shape == "human":
+        return posed_mesh(part, segments)
     if part.shape == "cloak":
         points, faces, smooth = _cloak(segments, part.size, part.cloak_back)
     elif part.shape == "hood":

@@ -19,6 +19,17 @@ from xtrifid.storage import export_obj, load_project, save_project
 
 
 class DetailTests(unittest.TestCase):
+    def test_releasing_dense_mesh_frees_its_geometry_after_an_edit(self):
+        import gc
+        import weakref
+
+        part = Part.parse(spec("torus"))
+        mesh = geometry.build(part, "render", "high")
+        retained = weakref.ref(mesh.vertices)
+        del mesh
+        gc.collect()
+        self.assertIsNone(retained())
+
     def test_detail_refines_curves_preserving_dimensions_and_planar_topology(self):
         parts = [Part.parse(spec(kind)) for kind in ("sphere", "box", "torus")]
         tube = Part.parse(spec("tube", inner_diameter=1))
@@ -50,6 +61,9 @@ class DetailTests(unittest.TestCase):
             self.assertEqual(scene.detail, "medium")
             high = replace(scene, detail="high")
             save_project(path, high, mode)
+            self.assertEqual(json.loads(path.read_text())["version"], 3)
+            compatible = json.loads(path.read_text()) | {"version": 2}
+            path.write_text(json.dumps(compatible))
             self.assertEqual(load_project(path), (high, mode))
             obj = path.with_suffix(".obj")
             export_obj(obj, high, mode)
@@ -93,6 +107,33 @@ class DetailWindowTests(unittest.TestCase):
 
         self.window = Studio(app)
         self.addCleanup(self.window.close)
+
+    def test_human_face_and_anatomy_controls_follow_selection(self):
+        from xtrifid.character import build_character
+
+        w = self.window
+        w.present()
+        scene = build_character({"cloak": "knee"}, "low")
+        w.install(scene, "game")
+        until(lambda: w.view.drawn)
+        self.assertEqual(w.focus_part.get_label(), "К лицу")
+        w.focus_part.emit("clicked")
+        self.assertGreater(w.view.zoom, 3)
+        self.assertGreater(w.view.target[2], 0.55)
+        self.assertTrue(w.anatomy.get_visible())
+        w.zone.set_selected(1)
+        w.zone_scale.set_value(1.12)
+        w.pose.set_selected(2)
+        w.physique.set_selected(1)
+        w.apply_anatomy()
+        self.assertEqual(dict(w.doc.scene.parts[0].body_scales)["ears"], 1.12)
+        self.assertEqual(w.doc.scene.parts[0].pose, "arms_out")
+        self.assertEqual(w.doc.scene.parts[0].physique, "male")
+        self.assertEqual(w.doc.scene.parts[1:], scene.parts[1:])
+        w.undo()
+        self.assertEqual(w.doc.scene, scene)
+        w.select(1)
+        self.assertFalse(w.anatomy.get_visible())
 
     def test_preview_reveals_curvature_on_the_back_of_a_model(self):
         from OpenGL import GL

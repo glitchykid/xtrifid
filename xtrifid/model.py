@@ -2,12 +2,16 @@ from dataclasses import asdict, dataclass, replace
 from math import isfinite
 
 from .organic import MAX_SECTIONS, ORGANIC_SHAPES
-from .polygon import normalize_outline, triangulate
+from .polygon import normalize_outline, simplify_outline, triangulate
 
 PRIMITIVES = ("box", "cylinder", "sphere", "cone", "torus", "extrusion", "lathe", "tube")
 SHAPES = PRIMITIVES + ORGANIC_SHAPES
 MODES = ("game", "render")
 DETAILS = ("low", "medium", "high")
+POSES = ("standing", "walking", "arms_out")
+PHYSIQUES = ("neutral", "male", "female")
+BODY_REGIONS = ("head", "ears", "hands", "feet", "shoulders", "waist", "nose", "lips", "chin")
+MIN_BODY_SCALE, MAX_BODY_SCALE = 0.75, 1.25
 MAX_PARTS = 48
 MAX_OUTLINE = 32
 MAX_LENGTH = 1000
@@ -23,10 +27,19 @@ def vector(value, length, low, high):
     return tuple(float(n) for n in value)
 
 
+LOFT_COORDS = ("height", "radius_x", "radius_y", "offset_right", "offset_back")
+
+
 def loft_sections(raw):
     if not isinstance(raw, (list, tuple)) or not 3 <= len(raw) <= MAX_SECTIONS:
         raise ValueError(f"Нужно от 3 до {MAX_SECTIONS} поперечных сечений")
-    rows = tuple(vector(r, 5, -1, 1) for r in raw)
+    rows = []
+    for row in raw:
+        if isinstance(row, dict):
+            if row.keys() != set(LOFT_COORDS):
+                raise ValueError("Нужны высота, два радиуса и два смещения сечения")
+            row = [row[key] for key in LOFT_COORDS]
+        rows.append(vector(row, 5, -1, 1))
     if (
         rows[0][0] != 0
         or rows[-1][0] != 1
@@ -39,7 +52,7 @@ def loft_sections(raw):
         if rx == ry == 0 and i in (0, len(rows) - 1):
             continue
         raise ValueError("Внутренним сечениям нужны два положительных радиуса")
-    return rows
+    return tuple(rows)
 
 
 @dataclass(frozen=True)
@@ -53,9 +66,12 @@ class Part:
     inner_diameter: float | None = None
     sections: tuple = ()
     cloak_back: bool = False
+    pose: str = "standing"
+    body_scales: tuple = ()
+    physique: str = "neutral"
 
     @classmethod
-    def parse(cls, data):
+    def parse(cls, data, *, simplify_profiles=False):
         if not isinstance(data, dict):
             raise ValueError("Ожидалось описание детали")
         name = data.get("name")
@@ -74,7 +90,10 @@ class Part:
             raw = data.get("outline")
             if not isinstance(raw, (list, tuple)) or not 3 <= len(raw) <= MAX_OUTLINE:
                 raise ValueError("Для этой формы нужен контур из 3–32 точек")
-            outline = normalize_outline(tuple(vector(p, 2, -1, 1) for p in raw))
+            points = tuple(vector(p, 2, -1, 1) for p in raw)
+            outline = normalize_outline(
+                simplify_outline(points) if simplify_profiles else points
+            )
             if shape == "lathe":
                 axis = [i for i, (r, _) in enumerate(outline) if r == 0]
                 if any(r < 0 for r, z in outline) or (
@@ -95,6 +114,26 @@ class Part:
             raise ValueError(
                 "Внутренний диаметр должен быть положительным и меньше наружного размера X"
             )
+        pose, scales, physique = "standing", (), "neutral"
+        if shape == "human":
+            pose = data.get("pose", "standing")
+            if pose not in POSES:
+                raise ValueError("Неизвестная поза человека")
+            physique = data.get("physique", "neutral")
+            if physique not in PHYSIQUES:
+                raise ValueError("Неизвестный анатомический вариант фигуры")
+            raw = data.get("body_scales", {})
+            if not isinstance(raw, dict) or not raw.keys() <= set(BODY_REGIONS):
+                raise ValueError("Неизвестная область тела")
+            values = vector(
+                [raw.get(region, 1) for region in BODY_REGIONS],
+                len(BODY_REGIONS),
+                MIN_BODY_SCALE,
+                MAX_BODY_SCALE,
+            )
+            scales = tuple(
+                (region, value) for region, value in zip(BODY_REGIONS, values) if value != 1
+            )
         return cls(
             name.strip(),
             shape,
@@ -105,6 +144,9 @@ class Part:
             bore,
             loft_sections(data.get("sections")) if shape == "loft" else (),
             cloak_back,
+            pose,
+            scales,
+            physique,
         )
 
     def data(self):
@@ -117,6 +159,14 @@ class Part:
             del data["sections"]
         if not self.cloak_back:
             del data["cloak_back"]
+        if self.physique == "neutral":
+            del data["physique"]
+        if self.shape != "human":
+            del data["pose"]
+        if self.body_scales:
+            data["body_scales"] = dict(self.body_scales)
+        else:
+            del data["body_scales"]
         return data
 
 
@@ -135,11 +185,12 @@ class Scene:
         return replace(self, parts=tuple(parts))
 
     @classmethod
-    def parse(cls, data):
+    def parse(cls, data, *, simplify_profiles=False):
         raw = data.get("parts") if isinstance(data, dict) else None
         if not isinstance(raw, list) or not 1 <= len(raw) <= MAX_PARTS:
             raise ValueError(f"Ожидалось от 1 до {MAX_PARTS} деталей")
-        return cls(tuple(Part.parse(p) for p in raw), data.get("detail", "medium"))
+        parts = tuple(Part.parse(p, simplify_profiles=simplify_profiles) for p in raw)
+        return cls(parts, data.get("detail", "medium"))
 
     def data(self):
         return {"parts": [p.data() for p in self.parts], "detail": self.detail}

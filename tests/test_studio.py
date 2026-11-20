@@ -33,6 +33,37 @@ def until(predicate, seconds=12):
 
 @unittest.skipUnless(os.getenv("DISPLAY"), "requires X11")
 class StudioTests(unittest.TestCase):
+    def test_focus_frames_selected_part_and_keeps_picking_in_sync(self):
+        from xtrifid.gtk import Gdk
+
+        app = Gtk.Application(
+            application_id="io.github.glitchykid.Xtrifid.FocusTest",
+            flags=Gio.ApplicationFlags.NON_UNIQUE,
+        )
+        app.register(None)
+        window = Studio(app)
+        self.addCleanup(window.close)
+        window.present()
+        scene = Scene.parse(
+            {"parts": [spec(), spec("sphere") | {"center": [6, 0, 4], "size": [0.5, 0.5, 0.5]}]}
+        )
+        window.install(scene, "render")
+        view = window.view
+        until(lambda: view.drawn)
+        window.select(1)
+        window.focus_part.emit("clicked")
+        cx, cy = view.get_width() / 2, view.get_height() / 2
+        for yaw in (0, 0.7, 1.57):
+            view.yaw = yaw
+            x, y = view.screen_position([6, 0, 4])
+            self.assertAlmostEqual(x, cx, places=4)
+            self.assertAlmostEqual(y, cy, places=4)
+            self.assertEqual(view.pick(cx, cy), 1)
+        self.assertGreater(view.zoom, 3)
+        view.key(None, Gdk.KEY_Home, 0, 0)
+        self.assertEqual(view.zoom, 1)
+        self.assertNotAlmostEqual(view.screen_position([6, 0, 4])[0], cx)
+
     def test_window_mesh_selection_exact_edit_profile_and_undo(self):
         app = Gtk.Application(
             application_id="io.github.glitchykid.Xtrifid.Test",

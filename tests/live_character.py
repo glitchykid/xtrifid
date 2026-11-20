@@ -23,7 +23,7 @@ def exercise(folder, constrained):
     try:
         w.prompt.set_text("сделай человека с плащом")
         assert not w.generate.get_sensitive()
-        w.detail.set_selected(2)
+        w.detail.set_selected(1 if constrained else 2)
         started = perf_counter()
         w.prompt.emit("activate")
         until(lambda: not w.busy)
@@ -39,22 +39,20 @@ def exercise(folder, constrained):
         w.part_list.set_selected(cloak)
         w.fields["size"][2].set_value(0.8)
         w.apply_numeric()
-        assert w.doc.scene.parts[cloak].size[2] == 0.8
+        assert w.doc.scene.parts[cloak].size[2] == 0.8, w.status.get_text()
         assert all(
             w.doc.scene.parts[i] == p for i, p in enumerate(original.parts) if i != cloak
         )
         w.undo()
         assert w.doc.scene == original
         if constrained:
-            w.detail.set_selected(1)
-            w.mode.set_selected(1)
-            assert w.doc.mode == "render" and w.doc.scene.detail == "low"
+            assert w.doc.mode == "game" and w.doc.scene.detail == "low"
             previous = w.doc.scene
             w.detail.set_selected(3)
             assert w.doc.scene is previous and w.detail.get_selected() == 1
             assert "лимит" in w.status.get_text(), w.status.get_text()
             print(w.status.get_text(), flush=True)
-            export_obj(folder / "constrained.obj", previous, "render")
+            export_obj(folder / "constrained.obj", previous, w.doc.mode)
             return
         for mode_index, mode in enumerate(("game", "render")):
             w.mode.set_selected(mode_index)

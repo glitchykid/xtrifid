@@ -12,6 +12,7 @@ a = Analysis(
         ("/usr/lib/x86_64-linux-gnu/gtk-4.0/4.0.0/immodules/libim-ibus.so", "immodules"),
     ],
     datas=[
+        ("/src/xtrifid/assets", "xtrifid/assets"),
         ("/opt/ollama/licenses/*", "ollama/licenses"),
         ("OLLAMA-LICENSE", "ollama/licenses"),
         ("/etc/fonts/fonts.conf", "fontconfig"),

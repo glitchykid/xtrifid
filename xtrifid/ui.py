@@ -7,7 +7,19 @@ from xtrifid.gtk import Gio, GLib, Gtk, Pango
 
 from .geometry import MeshBudgetError, build, check_scene_budget
 from .local_server import pull_model
-from .model import DETAILS, MAX_LENGTH, MIN_SIZE, MODES, Document, Part
+from .loft_editor import LoftEditor
+from .model import (
+    DETAILS,
+    MAX_BODY_SCALE,
+    MAX_LENGTH,
+    MIN_BODY_SCALE,
+    MIN_SIZE,
+    MODES,
+    PHYSIQUES,
+    POSES,
+    Document,
+    Part,
+)
 from .planner import MAX_PROMPT, ModelMissing, Planner, PlannerError
 from .profile import PROFILE_SHAPES, profile_guide
 from .profile_editor import ProfileEditor
@@ -51,6 +63,17 @@ headerbar {background:#20252f;color:#e7eaf0;}
 """
 
 DETAIL_LABELS = ("Низкая", "Средняя", "Высокая")
+ZONE_LABELS = {
+    "head": "Голова",
+    "ears": "Уши",
+    "hands": "Кисти",
+    "feet": "Стопы",
+    "shoulders": "Плечи",
+    "waist": "Талия",
+    "nose": "Нос",
+    "lips": "Губы",
+    "chin": "Подбородок",
+}
 
 
 class Studio(Gtk.ApplicationWindow):
@@ -98,7 +121,7 @@ class Studio(Gtk.ApplicationWindow):
         side.add_css_class("side")
         scroll.set_child(side)
         side.append(label("Описание модели", "section"))
-        self.prompt = Gtk.Entry(placeholder_text="Например, сделай человека с плащом")
+        self.prompt = Gtk.Entry(placeholder_text="Опишите форму, пропорции и детали")
         self.prompt.set_max_length(MAX_PROMPT)
         accessible(self.prompt, "Описание новой модели")
         self.prompt.connect("activate", lambda *_: self.request(False))
@@ -126,6 +149,28 @@ class Studio(Gtk.ApplicationWindow):
         side.append(self.part_list)
         self.inspector = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=7)
         side.append(self.inspector)
+        self.anatomy = Gtk.Expander(label="Анатомия и поза")
+        self.inspector.append(self.anatomy)
+        anatomy = Gtk.Grid(column_spacing=6, row_spacing=5)
+        self.anatomy.set_child(anatomy)
+        self.pose = Gtk.DropDown.new_from_strings(["Стоя", "В шаге", "Руки в стороны"])
+        self.physique = Gtk.DropDown.new_from_strings(["Нейтральное", "Мужское", "Женское"])
+        self.zone = Gtk.DropDown.new_from_strings(list(ZONE_LABELS.values()))
+        self.zone_scale = Gtk.SpinButton.new_with_range(MIN_BODY_SCALE, MAX_BODY_SCALE, 0.01)
+        self.zone_scale.set_digits(2)
+        for row, (title, control) in enumerate(
+            (
+                ("Телосложение", self.physique),
+                ("Поза", self.pose),
+                ("Область", self.zone),
+                ("Масштаб области", self.zone_scale),
+            )
+        ):
+            anatomy.attach(label(title, "muted"), 0, row, 1, 1)
+            accessible(control, title)
+            anatomy.attach(control, 1, row, 1, 1)
+        self.zone.connect("notify::selected", lambda *_: self.read_zone())
+        anatomy.attach(button("Применить к телу", self.apply_anatomy), 0, 4, 2, 1)
         self.profile_section = Gtk.Expander(label="Контур детали")
         self.point_editor = ProfileEditor(
             self.apply_point, self.notify_status, self.request_point, self.update_guide
@@ -133,6 +178,8 @@ class Studio(Gtk.ApplicationWindow):
         self.profile_section.set_child(self.point_editor)
         self.profile_section.connect("notify::expanded", lambda *_: self.update_guide())
         self.inspector.append(self.profile_section)
+        self.loft = LoftEditor(self.replace_part, self.notify_status, self.update_guide)
+        self.inspector.append(self.loft)
         self.fields = {}
         self.field_text = {}
         for attr, title, lo, hi, digits, step in (
@@ -187,6 +234,9 @@ class Studio(Gtk.ApplicationWindow):
         wire = Gtk.ToggleButton(label="Сетка")
         wire.connect("toggled", self.toggle_wire)
         toolbar.append(wire)
+        self.focus_part = button("К детали", lambda: self.view.focus_selected())
+        self.focus_part.set_tooltip_text("Приблизить выбранную деталь (F)")
+        toolbar.append(self.focus_part)
         toolbar.append(button("Вписать", lambda: self.view.reset_camera()))
         overlay = Gtk.Overlay(hexpand=True, vexpand=True)
         pane.append(overlay)
@@ -226,7 +276,7 @@ class Studio(Gtk.ApplicationWindow):
         for w in (self.prompt, self.opener, self.mode, self.detail):
             w.set_sensitive(not self.busy)
         self.generate.set_sensitive(not self.busy and self.detail.get_selected() > 0)
-        for w in (self.saver, self.exporter, self.inspector, self.part_list):
+        for w in (self.saver, self.exporter, self.inspector, self.part_list, self.focus_part):
             w.set_sensitive(scene and not self.busy)
         self.back.set_sensitive(bool(self.doc.history) and not self.busy)
         self.spinner.set_visible(self.busy)
@@ -238,7 +288,7 @@ class Studio(Gtk.ApplicationWindow):
             check_scene_budget(scene, mode)
         try:
             meshes = [build(p, mode, scene.detail) for p in parts]
-            self.view.set_meshes(meshes)
+            self.view.set_meshes(meshes, parts)
         except MemoryError as exc:
             raise MeshBudgetError("Недостаточно памяти для предпросмотра.") from exc
         if undo:
@@ -258,6 +308,8 @@ class Studio(Gtk.ApplicationWindow):
         if parts:
             self.select(self.selected, reset_point=reset_point)
         else:
+            self.anatomy.set_visible(False)
+            self.loft.set_part(None, True)
             self.point_editor.set_part(None)
             self.profile_section.set_visible(False)
             self.view.set_guide()
@@ -279,8 +331,14 @@ class Studio(Gtk.ApplicationWindow):
         self.selected = index
         self.part_list.set_selected(index)
         part = self.doc.scene.parts[index]
+        self.anatomy.set_visible(part.shape == "human")
+        if part.shape == "human":
+            self.pose.set_selected(POSES.index(part.pose))
+            self.physique.set_selected(PHYSIQUES.index(part.physique))
+            self.read_zone()
         self.profile_section.set_visible(part.shape in PROFILE_SHAPES)
         self.point_editor.set_part(part, reset_selection=reset_point)
+        self.loft.set_part(part, reset_point)
         for attr, fields in self.fields.items():
             for spin, value in zip(fields, getattr(part, attr)):
                 spin.set_value(value)
@@ -290,10 +348,40 @@ class Studio(Gtk.ApplicationWindow):
             self.bore.set_value(part.inner_diameter)
             self.field_text[self.bore] = self.bore.get_text()
         self.view.selected = index
+        self.focus_part.set_label("К лицу" if part.shape == "human" else "К детали")
         self.update_guide()
 
+    def read_zone(self):
+        if self.doc.scene:
+            part = self.doc.scene.parts[self.selected]
+            if part.shape == "human":
+                zone = tuple(ZONE_LABELS)[self.zone.get_selected()]
+                self.zone_scale.set_value(dict(part.body_scales).get(zone, 1.0))
+
+    def apply_anatomy(self):
+        from .character import with_character_pose
+
+        part = self.doc.scene.parts[self.selected]
+        self.zone_scale.update()
+        scales = dict(part.body_scales)
+        zone = tuple(ZONE_LABELS)[self.zone.get_selected()]
+        scales[zone] = self.zone_scale.get_value()
+        try:
+            updated = Part.parse(
+                part.data()
+                | {"body_scales": scales, "physique": PHYSIQUES[self.physique.get_selected()]}
+            )
+            updated = with_character_pose(updated, POSES[self.pose.get_selected()])
+            self.replace_part(updated)
+        except ValueError as exc:
+            self.notify_status(str(exc))
+            return
+        self.notify_status("Изменения фигуры применены")
+
     def update_guide(self):
-        if self.profile_section.get_expanded() and self.point_editor.part:
+        if self.loft.get_expanded() and self.loft.part and self.doc.scene:
+            self.view.set_guide(self.loft.guide(self.doc.mode, self.doc.scene.detail))
+        elif self.profile_section.get_expanded() and self.point_editor.part:
             self.view.set_guide(
                 profile_guide(
                     self.point_editor.part,

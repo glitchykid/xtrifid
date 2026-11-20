@@ -13,9 +13,10 @@ from xtrifid.organic import ORGANIC_SHAPES, organic_mesh, organic_triangle_bound
 from xtrifid.storage import load_project, save_project
 
 
-def depths_at(mesh, x, z):
+def depths_at(mesh, x, z, *, vertical=False):
     """Intersect a ray through (x, z) with the actual mesh triangles."""
-    a, b, c = mesh.vertices[list(triangles(mesh.faces))].transpose(1, 0, 2)
+    vertices = mesh.vertices[:, (0, 2, 1)] if vertical else mesh.vertices
+    a, b, c = vertices[list(triangles(mesh.faces))].transpose(1, 0, 2)
     u, v, point = b - a, c - a, np.array([x, z]) - a[:, [0, 2]]
     det = u[:, 0] * v[:, 2] - u[:, 2] * v[:, 0]
     valid = abs(det) > 1e-12
@@ -41,100 +42,113 @@ class CharacterTests(unittest.TestCase):
             with self.subTest(shape=part.shape):
                 self.assertTrue(outer == inner)
 
-    def test_outstretched_arms_clear_the_front_edges_of_the_cape(self):
-        scene = build_character({"pose": "arms_out", "cloak": "knee", "height_m": 1})
-        parts = {p.name: p for p in scene.parts}
-        garment = build(parts["Плащ"], "render")
-        arm = build(parts["Рука левая"], "render")
-        torso = build(parts["Туловище"], "render")
-        shoulder = [depths_at(m, 0.114, 0.82) for m in (arm, torso)]
-        self.assertTrue(all(len(hits) for hits in shoulder))
-        self.assertLess(
-            max(hits.min() for hits in shoulder), min(hits.max() for hits in shoulder)
-        )
-        for x in (0.14, 0.15, 0.16, 0.17):
-            z = 0.823
-            arm_depths = depths_at(arm, x, z)
-            cape_depths = depths_at(garment, x, z)
-            self.assertGreater(arm_depths.size, 0)
-            self.assertTrue((cape_depths > arm_depths.max()).all())
-        self.assertEqual(Scene.parse(scene.data()), scene)
+    def test_skin_is_the_same_with_or_without_a_requested_cloak(self):
+        for pose in ("standing", "walking", "arms_out"):
+            with self.subTest(pose=pose):
+                bare = build_character({"pose": pose})
+                caped = build_character({"pose": pose, "cloak": "knee"})
+                self.assertEqual([p.shape for p in bare.parts], ["human"])
+                self.assertEqual(caped.parts[:-1], bare.parts)
+                self.assertEqual(caped.parts[-1].shape, "cloak")
 
-    def test_tunic_covers_the_leading_thigh_above_the_hem_when_walking(self):
-        parts = {
-            p.name: p
-            for p in build_character({"height_m": 1, "pose": "walking", "cloak": "knee"}).parts
+    def test_pose_changes_arm_span_and_walking_stride_while_keeping_the_height(self):
+        from xtrifid.character import character_anchor
+
+        people = {
+            pose: build_character({"pose": pose, "height_m": 1.6}, "low")
+            for pose in ("standing", "walking", "arms_out")
         }
-        garment = build(parts["Туловище"], "render")
-        thigh = build(parts["Нога левая"], "render")
-        self.assertLess(
-            depths_at(garment, 0.057, 0.442).min(), depths_at(thigh, 0.057, 0.442).min()
-        )
+        hands = {
+            pose: character_anchor(person, "Кисть левая") for pose, person in people.items()
+        }
+        self.assertGreater(hands["arms_out"][0], hands["standing"][0] * 2)
+        self.assertGreater(hands["arms_out"][2], hands["standing"][2] + 0.25)
+        soles = {}
+        for pose, person in people.items():
+            body = build(person.parts[0], "game", "low").vertices
+            self.assertAlmostEqual(np.ptp(body[:, 2]), 1.6, delta=0.012)
+            self.assertAlmostEqual(body[:, 2].min(), 0, delta=0.012)
+            soles[pose] = [
+                body[(body[:, 0] * side > 0) & (body[:, 2] < 0.1), 1].mean() for side in (-1, 1)
+            ]
+            # The reference point lies inside the palm for placing accessories.
+            distances = np.linalg.norm(body - hands[pose], axis=1)
+            self.assertLess(distances.min(), 0.035)
+        self.assertGreater(abs(np.diff(soles["walking"])[0]), 0.15)
+        self.assertLess(abs(np.diff(soles["standing"])[0]), 0.015)
 
-    def test_back_of_torso_is_beneath_the_cape_from_neck_to_waist(self):
-        for length in ("knee", "ankle", "short"):
-            parts = {p.name: p for p in build_character({"height_m": 1, "cloak": length}).parts}
-            for z in (0.65, 0.72, 0.78, 0.82, 0.84, 0.853):
-                rears = []
-                for name in ("Туловище", "Плащ"):
-                    mesh = build(parts[name], "render")
-                    rears.append(depths_at(mesh, 0, z).max())
-                with self.subTest(length=length, z=z):
-                    self.assertGreater(rears[1], rears[0])
-
-    def test_cape_covers_both_shoulders_and_clasp_reaches_its_open_edges(self):
-        for length in ("short", "knee", "ankle"):
-            scene = build_character({"height_m": 1, "cloak": length})
-            parts = {p.name: p for p in scene.parts}
-            cape = build(parts["Плащ"], "render")
-            clasp = parts["Застёжка плаща"]
-            crossings = []
-            for mesh in (cape, build(parts["Рука левая"], "render")):
-                tri = mesh.vertices[list(triangles(mesh.faces))]
-                # Intersect the triangles with a horizontal plane passing through the shoulder.
-                edge = tri[:, [1, 2, 0]] - tri
-                dz = edge[:, :, 2]
-                t = (0.819 - tri[:, :, 2]) / np.where(dz != 0, dz, 1)
-                section = (tri + t[:, :, None] * edge)[(dz != 0) & (t >= 0) & (t <= 1)]
-                crossings.append(section[:, 0].max())
-            with self.subTest(length=length):
-                self.assertGreater(crossings[0], crossings[1])
-                # Sample the large front panels between rings; a brooch holds both flaps.
-                tri = cape.vertices[list(triangles(cape.faces))]
-                a, b = tri, tri[:, [1, 2, 0]]
-                samples = np.concatenate([a + t * (b - a) for t in np.linspace(0, 1, 16)])
-                inside = (((samples - clasp.center) / (np.asarray(clasp.size) / 2)) ** 2).sum(
-                    axis=2
-                ) < 1
-                self.assertLess(samples[inside][:, 0].min(initial=0), 0)
-                self.assertGreater(samples[inside][:, 0].max(initial=0), 0)
-            self.assertIn("Пояс", parts)
+    def test_local_ear_edit_leaves_the_body_and_pose_unchanged(self):
+        person = build_character({"pose": "walking"}).parts[0]
+        changed = Part.parse(person.data() | {"body_scales": {"ears": 1.24}})
+        original = build(person, "render").vertices
+        edited = build(changed, "render").vertices
+        off_face = original[:, 2] < person.size[2] * 0.86
+        np.testing.assert_array_equal(original[off_face], edited[off_face])
+        self.assertGreater(abs(original - edited).max(), 0.001)
+        for scales in ({"head": 1.3}, {"head": True}, {"arms": 2}, [], {"waist": None}):
+            with self.subTest(scales=scales), self.assertRaises(ValueError):
+                Part.parse(person.data() | {"body_scales": scales})
 
     def test_cloak_hood_proportions_and_height_follow_request(self):
         character = build_character({"height_m": 1.6, "cloak": "knee", "hood": True})
-        parts = {p.name: p for p in character.parts}
-        self.assertEqual(len(parts), len(character.parts))
-        self.assertEqual(parts["Плащ"].shape, "cloak")
-        self.assertEqual(parts["Капюшон"].shape, "hood")
-        self.assertGreater(parts["Туловище"].size[0], parts["Голова"].size[0])
-        self.assertGreater(parts["Голова"].center[2], parts["Туловище"].center[2])
-        self.assertAlmostEqual(max(p.center[2] + p.size[2] / 2 for p in parts.values()), 1.6)
-        self.assertAlmostEqual(min(p.center[2] - p.size[2] / 2 for p in parts.values()), 0)
-        plain = build_character({})
-        self.assertFalse({"cloak", "hood"} & {p.shape for p in plain.parts})
+        self.assertEqual([p.shape for p in character.parts], ["human", "cloak", "hood"])
+        self.assertAlmostEqual(max(p.center[2] + p.size[2] / 2 for p in character.parts), 1.6)
+        self.assertAlmostEqual(min(p.center[2] - p.size[2] / 2 for p in character.parts), 0)
         for length in ("short", "knee", "ankle"):
-            coat = next(
-                p for p in build_character({"cloak": length}).parts if p.shape == "cloak"
-            )
-            self.assertAlmostEqual(coat.size[2] + 2 * coat.center[2], 1.75 * 2 * 0.86)
+            cape = build_character({"height_m": 1, "cloak": length}).parts[-1]
+            mesh = build(cape, "render")
+            skin = build(build_character({"height_m": 1}).parts[0], "render")
+            for z in (0.63, 0.68, 0.73, 0.77, 0.8):
+                self.assertGreater(depths_at(mesh, 0, z).max(), depths_at(skin, 0, z).max())
         widths = [
             build_character({"build": b}).parts[0].size[0] for b in ("slim", "average", "broad")
         ]
         self.assertTrue(widths[0] < widths[1] < widths[2])
-        pose = {p.name: p for p in build_character({"pose": "arms_out"}).parts}
-        self.assertGreater(
-            abs(pose["Кисть левая"].center[0]), abs(parts["Кисть левая"].center[0]) * 2
-        )
+
+    def test_reposing_preserves_placement_and_rejects_oversize_results(self):
+        from xtrifid.character import with_character_pose
+
+        base = build_character({"height_m": 1.9, "build": "broad"}).parts[0]
+        posed = with_character_pose(base, "walking")
+        generated = build_character(
+            {"height_m": 1.9, "build": "broad", "pose": "walking"}
+        ).parts[0]
+        np.testing.assert_allclose(posed.size, generated.size)
+        np.testing.assert_allclose(posed.center, generated.center)
+        moved = Part.parse(base.data() | {"center": [3, 4, 5], "rotation": [10, 35, 20]})
+        restored = with_character_pose(with_character_pose(moved, "arms_out"), "standing")
+        np.testing.assert_allclose(restored.size, moved.size)
+        np.testing.assert_allclose(restored.center, moved.center)
+        huge = Part.parse(base.data() | {"size": [999, 1, 1]})
+        with self.assertRaises(ValueError):
+            with_character_pose(huge, "arms_out")
+
+    def test_shoulder_skin_stays_under_the_cape_for_each_physique(self):
+        for physique in ("neutral", "male", "female"):
+            scene = build_character(
+                {"height_m": 1, "cloak": "knee", "hood": True, "physique": physique}
+            )
+            skin, cape = [build(p, "render") for p in scene.parts[:2]]
+            for x in (0.061, 0.084, 0.100):
+                for y in (0.0, 0.017, 0.031):
+                    with self.subTest(physique=physique, x=x, y=y):
+                        self.assertGreater(
+                            depths_at(cape, x, y, vertical=True).max(),
+                            depths_at(skin, x, y, vertical=True).max(),
+                        )
+
+    def test_collar_rests_on_both_shoulders(self):
+        for hood in (False, True):
+            scene = build_character({"height_m": 1, "cloak": "knee", "hood": hood})
+            skin, cloth = [build(part, "render").vertices for part in scene.parts[:2]]
+            neck = skin[(skin[:, 2] > 0.72) & (skin[:, 2] < 0.88)]
+            for side in (-1, 1):
+                collar = cloth[
+                    (cloth[:, 2] > cloth[:, 2].max() - 0.025) & (side * cloth[:, 0] > 0.025)
+                ]
+                distances = np.linalg.norm(collar[:, None] - neck[None], axis=2).min(axis=1)
+                with self.subTest(hood=hood, side=side):
+                    self.assertLess(np.percentile(distances, 25), 0.008)
 
     def test_character_part_controls_round_trip_and_specs_are_bounded(self):
         scene = build_character({"pose": "walking", "cloak": "ankle"}, "high")
@@ -177,9 +191,11 @@ class CharacterTests(unittest.TestCase):
             if p.shape == "cloak"
         )
         shapes = {p.shape for p in scene.parts}
-        self.assertTrue(set(ORGANIC_SHAPES) <= shapes)
+        self.assertEqual({"human", "cloak", "hood"}, shapes)
         for n in (8, 16, 24, 32, 48, 64):
             for p in (*scene.parts, thrown_back):
+                if p.shape == "human":
+                    continue  # Topology of the authored anatomy is checked at each LOD separately.
                 if p.shape not in ORGANIC_SHAPES:
                     continue
                 with self.subTest(part=p.name, segments=n):
@@ -219,7 +235,13 @@ class CharacterTests(unittest.TestCase):
                     self.assertFalse(((sides > 0).all(axis=0) | (sides < 0).all(axis=0)).any())
 
     def test_invalid_loft_sections_rejected_before_meshing(self):
-        loft = next(p for p in build_character({}).parts if p.shape == "loft").data()
+        loft = {
+            "name": "Старая деталь",
+            "shape": "loft",
+            "size": [1, 1, 1],
+            "rotation": [0, 0, 0],
+            "center": [0, 0, 0],
+        }
         for rows in (
             None,
             [],

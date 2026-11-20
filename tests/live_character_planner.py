@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from xtrifid.character import build_character
+from xtrifid.character import build_character, character_anchor
 from xtrifid.geometry import build
 from xtrifid.planner import Planner
 
@@ -19,10 +19,10 @@ def check_accessory(client):
     box = scene.parts[-1]
     assert box.shape == "box"
     np.testing.assert_allclose(box.size, [0.1, 0.1, 0.1])
-    left = next(p for p in person.parts if p.name == "Кисть левая")
-    assert np.linalg.norm(np.subtract(box.center, left.center)) < 0.15, (
+    left = character_anchor(person, "Кисть левая")
+    assert np.linalg.norm(np.subtract(box.center, left)) < 0.15, (
         box.center,
-        left.center,
+        left,
     )
     print("AI accessory: 10 cm box at the left hand of a 1.6 m figure in a T-pose", flush=True)
 
