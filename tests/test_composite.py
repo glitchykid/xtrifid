@@ -29,6 +29,45 @@ CANOPY = {
 
 
 class CompositeTests(unittest.TestCase):
+    def test_recorded_spheres_keep_their_diameters_despite_a_conflicting_width_hint(self):
+        # Paired replies from the local model: the semantic plan says equal, the
+        # geometry reply specifies three spheres with distinct diameters.
+        lower, middle, upper = (f"Снежный шар ({s})" for s in ("нижний", "средний", "верхний"))
+        roles = [
+            {"name": upper, "support": middle, "width": "narrower", "joint": "joined"},
+            {"name": middle, "support": lower, "width": "equal", "joint": "joined"},
+            {"name": lower, "support": "@floor", "width": "unspecified", "joint": "resting"},
+        ]
+        parts = [
+            {
+                "name": name,
+                "shape": "sphere",
+                "size": [diameter] * 3,
+                "center": [0, 0, height],
+                "rotation": [0, 0, 0],
+                "support": support,
+            }
+            for support, (name, diameter, height) in enumerate(
+                [(lower, 1.2, -0.6), (middle, 0.8, 0.2), (upper, 0.5, 0.8)]
+            )
+        ]
+        replies = [SUBJECT | {"components": roles}, {"parts": parts}]
+        with patch.object(Planner, "_chat", side_effect=map(json.dumps, replies)):
+            scene = Planner().generate(
+                "Сделай снеговика из трёх снежных шаров друг на друге. Внизу самый большой шар, "
+                "сверху самый маленький. Больше ничего не добавляй."
+            )
+        ordered = sorted(scene.parts, key=lambda p: p.center[2])
+        for part, diameter in zip(ordered, (1.2, 0.8, 0.5), strict=True):
+            vertices = build(part, "render").vertices
+            distances = np.linalg.norm(vertices - part.center, axis=1)
+            np.testing.assert_allclose(distances, diameter / 2)
+        self.assertAlmostEqual(ordered[0].center[2], 0.6)
+        for bottom, top in zip(ordered, ordered[1:]):
+            separation = np.linalg.norm(np.subtract(top.center, bottom.center))
+            self.assertLessEqual(separation, (bottom.size[0] + top.size[0]) / 2)
+            self.assertGreater(separation, bottom.size[0] / 2)
+
     def test_repeated_invalid_object_hints_fall_back_to_the_original_request(self):
         prompt = "Окатанный камень с неровной поверхностью"
         invalid = SUBJECT | {"components": [COVER | {"support": 0}, SUPPORT]}

@@ -211,7 +211,10 @@ center = world centre of the part. rotation = degrees about X, then Y, then Z.
 Respect quantities, dimensions, relative placement, negative space and symmetry.
 Model the requested object in recognisable separate named pieces, with real dimensions
 and sensible connections. Put the base on z=0 unless asked otherwise. Name each piece
-uniquely in the language of the user. Sphere can be an ellipsoid. Cone points along +Z.
+uniquely in the language of the user. Use box for a cuboid, a rectangular block or a
+rectangular-section beam. It has six planar rectangular faces and square corners unless
+the user requests a bevel or rounding. Choose a rod's shape by its cross-section.
+Sphere can be an ellipsoid. Cone points along +Z.
 For any solid circular or elliptical disk use cylinder, size [diameter X, diameter Y,
 thickness] in metres. Its disk starts in the XY plane; rotate 90 degrees about X for XZ.
 For a cylinder world_size is [world width X, world depth Y, world height Z] of the

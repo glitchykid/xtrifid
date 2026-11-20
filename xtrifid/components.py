@@ -108,7 +108,9 @@ def ordered_components(data, roles):
 
 
 def fit_width(part, support, relation, detail):
-    if relation == "unspecified":
+    # A sphere's three equal dimensions define its diameter in every orientation.
+    has_fixed_diameter = part.shape == "sphere" and part.size[0] == part.size[1] == part.size[2]
+    if relation == "unspecified" or has_fixed_diameter:
         return part
     low, high = axis_bounds(part, detail, 0)
     support_low, support_high = axis_bounds(support, detail, 0)
