@@ -1,0 +1,62 @@
+name: Verify Xtrifid 0.7.0 in Docker
+
+on:
+  push:
+    branches: [codex/build-0.7.0]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      SOURCE_COMMIT: e8756e10be86df7d4aff3d84f7fbce27c70f7302
+    steps:
+      - name: Fetch the exact public release source
+        run: |
+          git init -q .
+          git remote add origin https://github.com/glitchykid/xtrifid.git
+          git fetch --depth=1 origin "$SOURCE_COMMIT"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
+      - name: Test the Docker development image
+        run: |
+          docker compose config --quiet
+          docker compose build studio tests
+          docker compose run --rm --no-deps -e OPENBLAS_NUM_THREADS=1 tests
+          sh tests/external_x11.sh
+      - name: Check refusal under memory pressure
+        run: |
+          docker run --rm --init --network none --cpus 2 --memory 660m --memory-swap 660m -e PYTHONPATH=/app -e OPENBLAS_NUM_THREADS=1 xtrifid-tests xvfb-run -a dbus-run-session -- python3 tests/live_character.py --constrained
+      - name: Build the Linux executable and notices
+        run: sh packaging/build.sh
+      - name: Launch the executable in a clean offline desktop
+        run: |
+          docker build --file packaging/Dockerfile --target smoke --tag xtrifid-native-smoke .
+          docker run --rm --init --network none --cpus 2 --memory 1536m -v "$PWD/exports/release/xtrifid-linux-x86_64:/artifact/xtrifid-linux-x86_64:ro" xtrifid-native-smoke
+      - name: Exercise PBR and both exports through native GTK
+        run: |
+          docker build -t xtrifid-gui-test - <<'DRIVER'
+          FROM xtrifid-native-smoke
+          USER root
+          RUN apt-get update && apt-get install -y --no-install-recommends python3-pyatspi python3-xlib python3-pil at-spi2-core
+          USER 1000:1000
+          ENTRYPOINT ["/usr/bin/python3", "/test/native_gui.py"]
+          DRIVER
+          docker run --rm --init --network none --cpus 2 --memory 1800m -v "$PWD/tests:/test:ro" -v "$PWD/exports/release/xtrifid-linux-x86_64:/app/xtrifid:ro" xtrifid-gui-test /app/xtrifid
+      - name: Archive verified executable
+        run: |
+          exports/release/xtrifid-linux-x86_64 --version
+          tar -C exports/release -cf xtrifid-linux-distribution.tar xtrifid-linux-x86_64 xtrifid-linux-x86_64-notices.tar.gz
+          sha256sum xtrifid-linux-distribution.tar
+      - name: Retain the checked distribution for release
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: tested-linux-distribution
+          path: xtrifid-linux-distribution.tar
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
