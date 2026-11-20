@@ -1,6 +1,7 @@
 """Bake the adult MakeHuman v1.3.0 male/female macro targets onto the shipped LODs."""
 
 import hashlib
+import json
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -8,7 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from tools.bake_human import eyes, read_body, subdivide
-from xtrifid.human_body import POSE_BOUNDS, deform
+from xtrifid.human_body import POSE_BOUNDS, deform, pose_heights
 
 # The three ancestry macro targets receive equal weight, as in MakeHuman's default
 # setting. Its adult average-weight, average-muscle universal targets contain zero deltas.
@@ -54,6 +55,7 @@ def bake(obj, targets, destination):
     raw, groups = source_geometry(obj)
     base = (raw[:, (0, 2, 1)] - [0, 1.09965, -8.1676]) * [1, -1, 1] / 16.6589
     ids = {tuple(v): i for i, v in enumerate(base[: len(body)].astype("<f4"))}
+    extrema = {kind: {pose: {} for pose in POSE_BOUNDS} for kind in ("neutral", *SOURCES)}
     for kind, sources in SOURCES.items():
         morphed = raw.copy()
         for family, checksum in sources:
@@ -102,13 +104,28 @@ def bake(obj, targets, destination):
                 moved.append((eye - control.mean(0)) @ warp + delta[helper].mean(0))
             offsets = quantize(np.concatenate(moved))
             output[f"lod{n}"] = offsets
-            if n == 48:
-                for pose in POSE_BOUNDS:
-                    posed = deform(
-                        rest, pose, offsets=offsets.astype(float) / 262144, joints=joints
-                    )
+            for pose in POSE_BOUNDS:
+                posed = deform(
+                    rest, pose, offsets=offsets.astype(float) / 262144, joints=joints
+                )
+                extrema[kind][pose][n] = [posed[:, 2].min(), posed[:, 2].max()]
+                if n == 48:
                     output[pose] = posed[:, 2].min()
+                if kind == "male":
+                    reference = deform(rest, pose)
+                    extrema["neutral"][pose][n] = [reference[:, 2].min(), reference[:, 2].max()]
         np.savez_compressed(destination / f"human-{kind}.npz", **output)
+    for kind, poses in extrema.items():
+        for pose, levels in poses.items():
+            floor = levels[48][0]
+            for n, bounds in levels.items():
+                actual = np.asarray(bounds)
+                if kind != "neutral":
+                    actual = pose_heights(actual, floor, pose)
+                levels[n] = (np.array((POSE_BOUNDS[pose][0][2], 1)) - actual).tolist()
+    (destination / "human-extrema.json").write_text(
+        json.dumps(extrema, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 
 from xtrifid.character import build_character, character_anchor
-from xtrifid.geometry import build, triangle_bound
+from xtrifid.geometry import build, rotation_matrix, triangle_bound
 from xtrifid.model import Part, Scene
 
 
@@ -26,8 +26,8 @@ class PhysiqueTests(unittest.TestCase):
                             triangle_bound(p, mode, detail),
                             triangle_bound(parts[0], mode, detail),
                         )
-                        self.assertAlmostEqual(m.vertices[:, 2].max(), 1.8, delta=0.009)
-                        self.assertAlmostEqual(m.vertices[:, 2].min(), 0, delta=0.009)
+                        self.assertAlmostEqual(m.vertices[:, 2].max(), 1.8, places=10)
+                        self.assertAlmostEqual(m.vertices[:, 2].min(), 0, places=10)
                     a, b = [m.vertices for m in meshes[1:]]
                     for z_range in ((0.63, 0.79), (0.88, 0.97)):
                         mask = (meshes[0].vertices[:, 2] > z_range[0] * 1.8) & (
@@ -47,8 +47,50 @@ class PhysiqueTests(unittest.TestCase):
                     for name in ("Кисть левая", "Кисть правая", "Голова"):
                         location = character_anchor(scene, name)
                         self.assertLess(np.linalg.norm(v - location, axis=1).min(), 0.045)
-                    self.assertAlmostEqual(v[:, 2].min(), 0, delta=0.008)
-                    self.assertAlmostEqual(np.ptp(v[:, 2]), 1.75, delta=0.008)
+                    self.assertAlmostEqual(v[:, 2].min(), 0, places=10)
+                    self.assertAlmostEqual(np.ptp(v[:, 2]), 1.75, places=10)
+
+    def test_every_pose_preserves_stature_and_ground_plane_in_local_coordinates(self):
+        tilt = (13, -27, 41)
+        axis = rotation_matrix(tilt)[:, 2]
+        for physique in ("male", "female", "neutral"):
+            for pose in ("walking", "arms_out", "standing"):
+                part = build_character(
+                    {"physique": physique, "pose": pose, "height_m": 1.75}
+                ).parts[0]
+                rotated = Part.parse(part.data() | {"rotation": tilt})
+                for mode in ("game", "render"):
+                    for detail in ("low", "medium", "high"):
+                        with self.subTest(
+                            physique=physique, pose=pose, mode=mode, detail=detail
+                        ):
+                            v = build(rotated, mode, detail).vertices
+                            h = (v - rotated.center) @ axis + rotated.center[2]
+                            np.testing.assert_allclose(
+                                [h.min(), h.max()], [0, 1.75], atol=1e-10, rtol=0
+                            )
+
+    def test_lod_calibration_preserves_explicit_extremity_edits(self):
+        scene = build_character(
+            {"physique": "female", "pose": "walking", "height_m": 1.8}, "low"
+        )
+        part = scene.parts[0]
+        v = build(part, "game", scene.detail).vertices
+        for region in ("head", "feet"):
+            changed = Part.parse(part.data() | {"body_scales": {region: 1.18}})
+            edited = build(changed, "game", scene.detail).vertices
+            unaffected = (
+                v[:, 2] < part.size[2] * 0.77
+                if region == "head"
+                else v[:, 2] > part.size[2] * 0.19
+            )
+            np.testing.assert_array_equal(edited[unaffected], v[unaffected])
+            self.assertGreater(np.linalg.norm(edited - v, axis=1).max(), 0.015)
+            if region == "head":
+                self.assertGreater(edited[:, 2].max(), 1.83)
+            else:
+                left = character_anchor(scene.with_part(0, changed), "Кисть левая")
+                np.testing.assert_array_equal(left, character_anchor(scene, "Кисть левая"))
 
     def test_invalid_or_missing_physique(self):
         part = build_character({}).parts[0]

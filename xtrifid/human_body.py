@@ -1,5 +1,6 @@
 """Pose the welded hm08 skin using its authored joint locations and weights."""
 
+import json
 from functools import cache
 from pathlib import Path
 
@@ -192,6 +193,17 @@ def pose_frame(pose):
     return (high - low), (high + low) / 2
 
 
+def pose_heights(z, source_floor, pose):
+    reference_floor = POSE_BOUNDS[pose][0][2]
+    return (z - source_floor) * (1 - reference_floor) / (1 - source_floor) + reference_floor
+
+
+@cache
+def _extremity_offsets():
+    path = Path(__file__).with_name("assets") / "human-extrema.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def character_points(part, points, field):
     if part.physique == "neutral":
         return deform(points, part.pose, part.body_scales)
@@ -202,10 +214,7 @@ def character_points(part, points, field):
             points, part.pose, part.body_scales, offsets=offsets, joints=asset["joints"]
         )
         source_floor = float(asset[part.pose])
-    reference_floor = POSE_BOUNDS[part.pose][0][2]
-    posed[:, 2] = (posed[:, 2] - source_floor) * (1 - reference_floor) / (
-        1 - source_floor
-    ) + reference_floor
+    posed[:, 2] = pose_heights(posed[:, 2], source_floor, part.pose)
     return posed
 
 
@@ -214,8 +223,11 @@ def posed_mesh(part, n):
 
     points, faces = rest_mesh(n)
     size, center = pose_frame(part.pose)
-    return (
-        (character_points(part, points, f"lod{n}") - center) / size,
-        faces,
-        (True,) * len(faces),
-    )
+    posed = character_points(part, points, f"lod{n}")
+    # A decimated sole or subdivided crown can lose millimetres. Correct only
+    # their end bands in rest space so edits, attachment points and all other
+    # vertices stay fixed. Baseline offsets were measured without local edits.
+    floor, crown = _extremity_offsets()[part.physique][part.pose][str(n)]
+    z = points[:, 2]
+    posed[:, 2] += floor * (1 - _fade(0.025, 0.065, z)) + crown * _fade(0.955, 0.982, z)
+    return (posed - center) / size, faces, (True,) * len(faces)
