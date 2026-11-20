@@ -48,6 +48,10 @@ class Surface:
             or max(smooth) > 1
         ):
             raise ValueError("Некорректные вершины или грани запечённой сетки")
+        for corners in (indices[:, :3], indices[quads][:, (0, 2, 3)]):
+            a, b, c = (xyz[corners[:, i]] for i in range(3))
+            if np.any(np.all(np.cross(b - a, c - a) == 0, axis=1)):
+                raise ValueError("Запечённая поверхность содержит грань нулевой площади")
         return cls(vertices, faces, smooth, len(indices) + int(quads.sum()))
 
     @classmethod

@@ -2,7 +2,9 @@
 
 Usage: python3 tests/native_gui.py /absolute/path/to/xtrifid-linux-x86_64 [--generate]
 The external driver uses xvfb-run, dbus-run-session, python3-pyatspi, python3-xlib
-and python3-pil. For --generate, select a running Ollama with OLLAMA_URL or
+and python3-pil. The default run covers the reference image chooser, textured
+Low Poly OBJ export and a baked cloth frame entirely offline.
+For --generate, select a running Ollama with OLLAMA_URL or
 point OLLAMA_MODELS at the existing model cache for the bundled server.
 """
 
@@ -55,20 +57,22 @@ def lookup(container, role, name):
         raise
 
 
-def check_obj(path, expected_size=None, expected_faces=None):
+def check_obj(path, expected_size=None, expected_faces=None, *, expected_euler=None):
     vertices, faces = [], []
     for line in path.read_text().splitlines():
         fields = line.split()
         if fields[:1] == ["v"]:
             vertices.append(tuple(map(float, fields[1:])))
         if fields[:1] == ["f"]:
-            faces.append(tuple(map(int, fields[1:])))
+            faces.append(tuple(int(corner.split("/")[0]) for corner in fields[1:]))
     if expected_faces is not None:
         assert len(faces) == expected_faces, len(faces)
     assert {len(f) for f in faces} == {3}
     assert all(1 <= i <= len(vertices) for f in faces for i in f)
     edges = Counter((a, b) for f in faces for a, b in zip(f, (*f[1:], f[0])))
     assert all(a != b and n == 1 and edges[b, a] == 1 for (a, b), n in edges.items())
+    if expected_euler is not None:
+        assert len(vertices) - len(edges) // 2 + len(faces) == expected_euler
     size = [round(max(axis) - min(axis), 5) for axis in zip(*vertices)]
     if expected_size is not None:
         assert size == expected_size, size
@@ -77,6 +81,36 @@ def check_obj(path, expected_size=None, expected_faces=None):
         flush=True,
     )
     return size
+
+
+def check_material(obj, resolution):
+    from PIL import Image
+
+    records = [line.split() for line in obj.read_text().splitlines() if line]
+    uvs = [tuple(map(float, r[1:])) for r in records if r[0] == "vt"]
+    faces = [r[1:] for r in records if r[0] == "f"]
+    assert (
+        faces
+        and uvs
+        and all(1 <= int(corner.split("/")[1]) <= len(uvs) for face in faces for corner in face)
+    )
+    assert {r[1] for r in records if r[0] == "s"} == {"off"}
+    (library,) = [obj.parent / r[1] for r in records if r[0] == "mtllib"]
+    used = {r[1] for r in records if r[0] == "usemtl"}
+    maps = {}
+    for line in library.read_text().splitlines():
+        if line.startswith("newmtl "):
+            current = line.split()[1]
+        elif line.startswith("map_Kd "):
+            maps[current] = library.parent / line[7:]
+    assert len(used) == 1
+    with Image.open(maps[used.pop()]) as rgb:
+        assert (rgb.format, rgb.size) == ("PNG", (resolution, resolution))
+        red, green, blue = rgb.convert("RGB").getextrema()
+        assert red[1] - red[0] > 12 and red[0] > max(green[1], blue[1])
+    print(
+        f"Material verified: {len(uvs)} UVs, {resolution} × {resolution} red fabric", flush=True
+    )
 
 
 def stage_session(binary, generate):
@@ -134,7 +168,7 @@ def stage_session(binary, generate):
 
 def exercise(binary, work, generate):
     import pyatspi as at
-    from PIL import ImageGrab
+    from PIL import Image, ImageDraw, ImageGrab
     from Xlib import X, display
     from Xlib.ext import xtest
 
@@ -182,9 +216,37 @@ def exercise(binary, work, generate):
             xtest.fake_input(x, event, 1)
         x.sync()
 
+    def pointer_click(widget):
+        # Some GTK4 controls have bounds but no remote action. Resolve their window
+        # on our private X display and click the same visible target as a user.
+        top = widget
+        while top.getRole() not in (at.ROLE_FRAME, at.ROLE_DIALOG):
+            top = top.parent
+        root = x.screen().root
+        wm_name = x.intern_atom("_NET_WM_NAME")
+        window = next(
+            win
+            for win in reversed(root.query_tree().children)
+            if win.get_attributes().map_state == X.IsViewable
+            and (title := win.get_full_property(wm_name, X.AnyPropertyType))
+            and title.value.decode("utf-8") == top.name
+        )
+        origin = root.translate_coords(window, 0, 0)
+        bounds = widget.queryComponent().getExtents(at.WINDOW_COORDS)
+        xtest.fake_input(
+            x,
+            X.MotionNotify,
+            x=origin.x + bounds.x + bounds.width // 2,
+            y=origin.y + bounds.y + bounds.height // 2,
+        )
+        for event in (X.ButtonPress, X.ButtonRelease):
+            xtest.fake_input(x, event, 1)
+        x.sync()
+
     def click(widget):
         actions = widget.queryAction()
-        assert actions.nActions > 0 and actions.doAction(0), widget.name
+        if not (actions.nActions and actions.doAction(0)):
+            pointer_click(widget)
 
     def expect(root, role, name, seconds=20):
         return wait_for(lambda: lookup(root, role, name), f"{role} {name}", process, seconds)
@@ -201,12 +263,70 @@ def exercise(binary, work, generate):
         )
         print(f"Preview: {count} mesh-coloured pixels in the viewport", flush=True)
 
-    def export(name):
-        click(expect(frame, at.ROLE_PUSH_BUTTON, "Экспорт OBJ"))
+    def save_as(name):
+        ext = Path(name).suffix
+        click(
+            expect(frame, at.ROLE_PUSH_BUTTON, "Экспорт OBJ" if ext == ".obj" else "Сохранить")
+        )
         click(expect(desktop, at.ROLE_PUSH_BUTTON, "Save"))
-        output = work / "exports/model.obj"
+        output = work / "exports" / ("model" + ext)
         wait_for(lambda: output.is_file() and output.stat().st_size > 0, str(output), process)
         return output.rename(output.with_name(name))
+
+    def reference_workshop():
+        path = work / "exports" / "Front ring.png"
+        image = Image.new("RGBA", (96, 96))
+        drawing = ImageDraw.Draw(image)
+        drawing.ellipse((16, 8, 79, 87), fill="navy")
+        drawing.ellipse((34, 28, 61, 65), fill=(0, 0, 0, 0))
+        image.save(path)
+        click(expect(frame, at.ROLE_CHECK_BOX, "Low Poly"))
+        click(expect(frame, at.ROLE_PUSH_BUTTON, "По референсам…"))
+        dialog = expect(desktop, at.ROLE_FRAME, "Создать по референсам")
+        click(expect(dialog, at.ROLE_PUSH_BUTTON, "Вид спереди"))
+        chooser = expect(desktop, at.ROLE_DIALOG, "Выберите изображение PNG или JPEG")
+        cell = expect(chooser, at.ROLE_TABLE_CELL, path.name)
+        pointer_click(cell)
+        click(expect(chooser, at.ROLE_PUSH_BUTTON, "Open"))
+        expect(dialog, at.ROLE_LABEL, path.name)
+        build = expect(dialog, at.ROLE_PUSH_BUTTON, "Построить модель")
+        wait_for(lambda: build.getState().contains(at.STATE_SENSITIVE), "PNG decoded", process)
+        click(build)
+        expect(frame, at.ROLE_LABEL, "Модель по референсу готова")
+        expect(frame, at.ROLE_COMBO_BOX, "1. Front ring")
+        click(expect(frame, at.ROLE_PUSH_BUTTON, "Текстура детали"))
+        field = expect(frame, at.ROLE_TEXT, "Описание текстуры")
+        field.queryEditableText().setTextContents("Красная ткань #a80000 #ff1808")
+        click(expect(frame, at.ROLE_PUSH_BUTTON, "Назначить"))
+        expect(frame, at.ROLE_LABEL, "Текстура применена")
+
+        def red_pixels():
+            sample = ImageGrab.grab(xdisplay=os.environ["DISPLAY"]).crop((500, 185, 1010, 560))
+            return sum(r > 65 and r > 3 * max(g, b) for r, g, b in sample.getdata()) > 1500
+
+        wait_for(red_pixels, "Textured model renders red in OpenGL", process)
+        ring = save_as("textured-ring.obj")
+        check_obj(ring, [0.8, 0.44, 1], expected_euler=0)
+        check_material(ring, 256)
+        click(expect(frame, at.ROLE_PUSH_BUTTON, "Физика"))
+        slider = expect(frame, at.ROLE_SLIDER, "Кадр симуляции")
+        slider.queryValue().currentValue = 6
+        expect(frame, at.ROLE_LABEL, "Кадр 6 / 180    0.20 с")
+        click(expect(frame, at.ROLE_PUSH_BUTTON, "Запечь кадр в модель"))
+        expect(frame, at.ROLE_COMBO_BOX, "2. Ткань")
+        saved = json.loads(save_as("textured-ring-and-cloth.xtri").read_text())
+        assert saved["style"] == "low_poly"
+        ring, cloth = saved["parts"]
+        assert ring["shape"] == "reference" and [round(v, 5) for v in ring["size"]] == [
+            0.8,
+            0.44,
+            1,
+        ]
+        (mask,) = ring["masks"]
+        assert "1" in mask[len(mask) // 2] and mask[len(mask) // 2][len(mask[0]) // 2] == "0"
+        assert ring["texture"]["material"] == "fabric" and cloth["shape"] == "surface"
+        assert cloth["surface"]["vertices"] and cloth["surface"]["faces"]
+        print("Front PNG hole, Low Poly and cloth bake preserved in the project", flush=True)
 
     try:
         desktop = at.Registry.getDesktop(0)
@@ -217,7 +337,7 @@ def exercise(binary, work, generate):
         popover = expect(frame, at.ROLE_LIST_BOX, "")
         click_menu_item(popover, expect(popover, at.ROLE_LABEL, "Game Ready"))
         expect(frame, at.ROLE_COMBO_BOX, "Game Ready")
-        check_obj(export("bushing.obj"), [0.08, 0.08, 0.06], 128)
+        check_obj(save_as("bushing.obj"), [0.08, 0.08, 0.06], 128)
         click(expect(frame, at.ROLE_TOGGLE_BUTTON, "Средняя"))
         popover = expect(frame, at.ROLE_LIST_BOX, "")
         click_menu_item(popover, expect(popover, at.ROLE_LABEL, "Низкая"))
@@ -228,7 +348,7 @@ def exercise(binary, work, generate):
         expect(frame, at.ROLE_COMBO_BOX, "1. Человек")
         click(expect(frame, at.ROLE_PUSH_BUTTON, "К лицу"))
         preview(portrait=True)
-        figure = export("character.obj")
+        figure = save_as("character.obj")
         size = check_obj(figure)
         assert size[2] == 1.75 and any(
             line.startswith("o ") and line.endswith("_Плащ")
@@ -244,7 +364,8 @@ def exercise(binary, work, generate):
                 260,
             )
             preview()
-            check_obj(export("block.obj"), [0.4, 0.2, 0.1], 12)
+            check_obj(save_as("block.obj"), [0.4, 0.2, 0.1], 12)
+        reference_workshop()
         click(expect(frame, at.ROLE_PUSH_BUTTON, "Close"))
         assert process.wait(timeout=15) == 0
     finally:

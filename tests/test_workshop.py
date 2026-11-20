@@ -104,6 +104,10 @@ class WorkshopTests(unittest.TestCase):
         for bad in (
             Mesh(vertices, ((0, 1, 4),), (True,)),
             Mesh(vertices, ((0, 1, 1),), (False,)),
+            Mesh(np.zeros_like(vertices), ((0, 1, 2),), (True,)),
+            Mesh(
+                np.array([[0, 0, 0], [0, 1, 0], [1, 0, 0], [2, 0, 0]]), ((0, 1, 2, 3),), (True,)
+            ),
             Mesh(vertices * float("nan"), mesh.faces, mesh.smooth),
         ):
             with self.assertRaises(ValueError):

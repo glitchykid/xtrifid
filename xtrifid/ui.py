@@ -8,10 +8,12 @@ from xtrifid.gtk import Gio, GLib, Gtk, Pango
 from .geometry import MeshBudgetError, build, check_scene_budget
 from .local_server import pull_model
 from .loft_editor import LoftEditor
+from .mask_editor import MaskEditor
 from .model import (
     DETAILS,
     MAX_BODY_SCALE,
     MAX_LENGTH,
+    MAX_PARTS,
     MIN_BODY_SCALE,
     MIN_SIZE,
     MODES,
@@ -23,7 +25,14 @@ from .model import (
 from .planner import MAX_PROMPT, ModelMissing, Planner, PlannerError
 from .profile import PROFILE_SHAPES, profile_guide
 from .profile_editor import ProfileEditor
+from .reference import photo_scene, reference_scene
+from .reference_ui import ReferenceDialog
+from .sculpt_panel import SculptPanel
+from .simulation_panel import SimulationPanel
 from .storage import export_obj, load_project, save_project
+from .surface import baked_part
+from .texture_panel import TexturePanel
+from .texture_plan import text_to_texture
 from .viewport import Viewport
 
 
@@ -93,6 +102,8 @@ class Studio(Gtk.ApplicationWindow):
         self.cancel_download = threading.Event()
         self.file_folder = None
         self.selected = 0
+        self.meshes = []
+        self.reference_dialog = None
         self.busy = False
         self.closed = False
         self.syncing = False
@@ -141,6 +152,15 @@ class Studio(Gtk.ApplicationWindow):
         side.append(settings)
         self.generate = button("Создать модель", lambda: self.request(False), "primary")
         side.append(self.generate)
+        sources = Gtk.Box(spacing=8)
+        self.low_poly = Gtk.CheckButton(label="Low Poly")
+        self.low_poly.set_tooltip_text("Упростить сетку и показать плоские грани")
+        self.low_poly.connect("toggled", self.change_settings)
+        self.reference_button = button("По референсам…", self.choose_references)
+        self.reference_button.set_hexpand(True)
+        sources.append(self.low_poly)
+        sources.append(self.reference_button)
+        side.append(sources)
         side.append(Gtk.Separator())
         side.append(label("Детали", "section"))
         self.part_list = Gtk.DropDown.new_from_strings([])
@@ -180,6 +200,18 @@ class Studio(Gtk.ApplicationWindow):
         self.inspector.append(self.profile_section)
         self.loft = LoftEditor(self.replace_part, self.notify_status, self.update_guide)
         self.inspector.append(self.loft)
+        self.sculpt_editor = SculptPanel(self.replace_part, self.notify_status)
+        self.inspector.append(self.sculpt_editor)
+        self.mask_editor = MaskEditor(self.replace_part, self.notify_status)
+        self.inspector.append(self.mask_editor)
+        self.simulation = SimulationPanel(
+            self.simulation_preview, self.bake_simulation, self.notify_status
+        )
+        self.material = TexturePanel(
+            self.apply_texture, self.notify_status, self.request_texture
+        )
+        self.inspector.append(self.simulation)
+        self.inspector.append(self.material)
         self.fields = {}
         self.field_text = {}
         for attr, title, lo, hi, digits, step in (
@@ -264,6 +296,9 @@ class Studio(Gtk.ApplicationWindow):
     def closing(self, *_):
         self.closed = True
         self.cancel_download.set()
+        self.simulation.stop()
+        if self.reference_dialog:
+            self.reference_dialog.close()
         return False
 
     def notify_status(self, message):
@@ -273,7 +308,14 @@ class Studio(Gtk.ApplicationWindow):
         scene = self.doc.scene is not None
         self.download.set_visible(self.missing_model is not None)
         self.download.set_sensitive(not self.busy)
-        for w in (self.prompt, self.opener, self.mode, self.detail):
+        for w in (
+            self.prompt,
+            self.opener,
+            self.mode,
+            self.detail,
+            self.low_poly,
+            self.reference_button,
+        ):
             w.set_sensitive(not self.busy)
         self.generate.set_sensitive(not self.busy and self.detail.get_selected() > 0)
         for w in (self.saver, self.exporter, self.inspector, self.part_list, self.focus_part):
@@ -287,10 +329,11 @@ class Studio(Gtk.ApplicationWindow):
         if scene:
             check_scene_budget(scene, mode)
         try:
-            meshes = [build(p, mode, scene.detail) for p in parts]
+            meshes = [build(p, mode, scene.detail, scene.style) for p in parts]
             self.view.set_meshes(meshes, parts)
         except MemoryError as exc:
             raise MeshBudgetError("Недостаточно памяти для предпросмотра.") from exc
+        self.meshes = meshes
         if undo:
             self.doc.undo()
         else:
@@ -302,6 +345,7 @@ class Studio(Gtk.ApplicationWindow):
         self.mode.set_selected(MODES.index(mode))
         if scene:
             self.detail.set_selected(DETAILS.index(scene.detail) + 1)
+            self.low_poly.set_active(scene.style == "low_poly")
         self.part_list.set_model(
             Gtk.StringList.new([f"{i + 1}. {p.name}" for i, p in enumerate(parts)])
         )
@@ -309,6 +353,10 @@ class Studio(Gtk.ApplicationWindow):
             self.select(self.selected, reset_point=reset_point)
         else:
             self.anatomy.set_visible(False)
+            self.material.set_part(None)
+            self.sculpt_editor.set_part(None, True)
+            self.mask_editor.set_part(None)
+            self.simulation.set_target(None, None, "medium")
             self.loft.set_part(None, True)
             self.point_editor.set_part(None)
             self.profile_section.set_visible(False)
@@ -347,6 +395,15 @@ class Studio(Gtk.ApplicationWindow):
         if part.inner_diameter is not None:
             self.bore.set_value(part.inner_diameter)
             self.field_text[self.bore] = self.bore.get_text()
+        self.material.set_part(part)
+        self.mask_editor.set_part(part)
+        self.sculpt_editor.set_part(part, reset_point)
+        colliders = [
+            (p, m)
+            for i, (p, m) in enumerate(zip(self.doc.scene.parts, self.meshes))
+            if i != index
+        ]
+        self.simulation.set_target(part, self.meshes[index], self.doc.scene.detail, colliders)
         self.view.selected = index
         self.focus_part.set_label("К лицу" if part.shape == "human" else "К детали")
         self.update_guide()
@@ -380,7 +437,9 @@ class Studio(Gtk.ApplicationWindow):
 
     def update_guide(self):
         if self.loft.get_expanded() and self.loft.part and self.doc.scene:
-            self.view.set_guide(self.loft.guide(self.doc.mode, self.doc.scene.detail))
+            self.view.set_guide(
+                self.loft.guide(self.doc.mode, self.doc.scene.detail, self.doc.scene.style)
+            )
         elif self.profile_section.get_expanded() and self.point_editor.part:
             self.view.set_guide(
                 profile_guide(
@@ -388,6 +447,7 @@ class Studio(Gtk.ApplicationWindow):
                     self.point_editor.selected_index,
                     self.doc.mode,
                     self.doc.scene.detail,
+                    self.doc.scene.style,
                 )
             )
         else:
@@ -401,7 +461,7 @@ class Studio(Gtk.ApplicationWindow):
         self.present_scene(scene, mode, reset_point=True)
         self.view.reset_camera()
 
-    def change_settings(self, widget, _):
+    def change_settings(self, widget, *_):
         if self.syncing or self.busy:
             return
         scene = self.doc.scene
@@ -411,22 +471,127 @@ class Studio(Gtk.ApplicationWindow):
             self.doc.apply(None, mode)
             self.controls()
             return
-        if index and mode == self.doc.mode and DETAILS[index - 1] == scene.detail:
+        style = self.chosen_style()
+        if (
+            index
+            and mode == self.doc.mode
+            and DETAILS[index - 1] == scene.detail
+            and style == scene.style
+        ):
             return
         try:
             if not index:
                 raise ValueError("Выберите детализацию модели.")
-            self.present_scene(replace(scene, detail=DETAILS[index - 1]), mode)
+            self.present_scene(replace(scene, detail=DETAILS[index - 1], style=style), mode)
         except ValueError as exc:
             self.syncing = True
             self.mode.set_selected(MODES.index(self.doc.mode))
             self.detail.set_selected(DETAILS.index(scene.detail) + 1)
+            self.low_poly.set_active(scene.style == "low_poly")
             self.syncing = False
             self.notify_status(str(exc))
         else:
             self.notify_status(
                 f"{self.mode.get_selected_item().get_string()} · {DETAIL_LABELS[index - 1]} детализация"
             )
+
+    def chosen_style(self):
+        return "low_poly" if self.low_poly.get_active() else "standard"
+
+    def simulation_preview(self, mesh, replace_selected):
+        if mesh is not None and self.chosen_style() == "low_poly":
+            mesh = replace(mesh, smooth=(False,) * len(mesh.faces))
+        self.view.set_simulation_preview(mesh, replace_selected)
+
+    def bake_simulation(self, name, mesh, replace_selected):
+        scene = self.doc.scene
+        if scene is None or self.busy:
+            return
+        if not replace_selected and len(scene.parts) >= MAX_PARTS:
+            raise ValueError("Достигнут предел числа деталей сцены")
+        part = baked_part(name, mesh)
+        if replace_selected:
+            part = replace(part, texture=scene.parts[self.selected].texture)
+            self.replace_part(part)
+        else:
+            self.present_scene(replace(scene, parts=(*scene.parts, part)), self.doc.mode)
+            self.select(len(scene.parts))
+        self.notify_status(f"Кадр сохранён в геометрии · {name}")
+
+    def apply_texture(self, texture):
+        if self.doc.scene:
+            part = self.doc.scene.parts[self.selected]
+            self.replace_part(replace(part, texture=texture))
+            self.notify_status("Текстура применена" if texture else "Текстура снята")
+
+    def request_texture(self, prompt, seed, resolution):
+        self.run_planner(
+            prompt,
+            lambda text: text_to_texture(self.planner, text, seed, resolution),
+            self.apply_texture,
+            "ИИ подбирает узор и палитру…",
+        )
+
+    def choose_references(self):
+        if not self.detail.get_selected():
+            self.notify_status("Выберите детализацию модели.")
+            self.detail.grab_focus()
+            return
+        dialog = ReferenceDialog(
+            self,
+            self.generate_reference,
+            os.environ.get("XTRIFID_FILES") or self.file_folder,
+            self.prompt.get_text(),
+            os.environ.get("OLLAMA_URL", ""),
+        )
+        self.reference_dialog = dialog
+        dialog.connect("close-request", lambda *_: setattr(self, "reference_dialog", None))
+        dialog.present()
+
+    def generate_reference(self, request):
+        if self.busy or self.closed or not self.detail.get_selected():
+            return
+        mode, detail, style = (
+            self.doc.mode,
+            DETAILS[self.detail.get_selected() - 1],
+            self.chosen_style(),
+        )
+        try:
+            check_scene_budget(None, mode)
+        except ValueError as exc:
+            self.notify_status(str(exc))
+            return
+
+        def compute():
+            if request.photo:
+                return photo_scene(
+                    self.planner,
+                    request.front,
+                    request.side,
+                    height_m=request.height,
+                    detail=detail,
+                    prompt=request.prompt,
+                    mode=mode,
+                    style=style,
+                )
+            scene = reference_scene(
+                request.front,
+                request.side,
+                height_m=request.height,
+                depth_m=request.depth,
+                detail=detail,
+                tolerance=request.tolerance,
+                rounded=request.rounded,
+            )
+            return replace(scene, style=style)
+
+        def apply(scene):
+            self.install(scene, mode)
+            self.file_folder = str(request.front.parent)
+            self.notify_status("Модель по референсу готова")
+
+        self.missing_model = None
+        self.run_task(compute, apply, "Построение модели по референсу…")
 
     def toggle_wire(self, widget):
         self.view.wire = widget.get_active()
@@ -512,7 +677,7 @@ class Studio(Gtk.ApplicationWindow):
         else:
 
             def install(scene):
-                self.install(scene, self.doc.mode)
+                self.install(replace(scene, style=self.chosen_style()), self.doc.mode)
                 self.notify_status(
                     "Модель готова. Выберите деталь в окне просмотра или в списке."
                 )
@@ -573,6 +738,7 @@ class Studio(Gtk.ApplicationWindow):
 
     def run_task(self, compute, apply, progress):
         scene = self.doc.scene
+        self.simulation.stop()
         self.busy = True
         self.controls()
         self.notify_status(progress)
@@ -602,7 +768,7 @@ class Studio(Gtk.ApplicationWindow):
                 value = compute()
             except MemoryError:
                 GLib.idle_add(finish, None, MeshBudgetError("Недостаточно памяти для запроса."))
-            except (PlannerError, ValueError) as exc:
+            except (PlannerError, ValueError, OSError, GLib.Error, RecursionError) as exc:
                 GLib.idle_add(finish, None, exc)
             else:
                 GLib.idle_add(finish, value, None)
