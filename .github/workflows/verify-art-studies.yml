@@ -1,0 +1,23 @@
+name: Verify game art studies in Docker
+on:
+  push:
+    branches: [codex/art-studies-ci]
+permissions:
+  contents: read
+jobs:
+  art-studies:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Fetch the exact game art study sources
+        run: |
+          git init -q .
+          git remote add origin https://github.com/glitchykid/xtrifid.git
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Build and test the studio including all seven projects
+        run: |
+          docker compose config --quiet
+          docker compose build tests
+          docker compose run --rm --no-deps -e OPENBLAS_NUM_THREADS=1 tests
