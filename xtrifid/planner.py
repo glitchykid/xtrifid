@@ -30,6 +30,7 @@ from .ollama import DEFAULT_URL, PlannerError, post_chat
 from .ollama import ModelMissing as ModelMissing
 from .organic import MAX_SECTIONS
 from .profile import move_profile_point, profile_points
+from .sculpt_plan import SCULPT_INSTRUCTIONS, SCULPT_RECIPE, sculpt_scene
 
 MAX_PROMPT = 2000
 MAX_ACCESSORY_DESCRIPTION = 160
@@ -179,6 +180,16 @@ SUBJECT = {
                 "top_lean": {"type": "string", "enum": ["as_drawn", *LOFT_LEANS]},
             },
         },
+        {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["subject", "body", "growth"],
+            "properties": {
+                "subject": {"type": "string", "enum": ["branched_organic"]},
+                "body": {"type": "string", "minLength": 1, "maxLength": 80},
+                "growth": {"type": "string", "minLength": 1, "maxLength": 160},
+            },
+        },
     ]
 }
 
@@ -268,7 +279,11 @@ and chin. Use build alone for an overall broad or slim build.
 A cloak of unspecified length reaches the knees. Convert centimetres to metres.
 Example for a slim 165 cm tall human with outstretched arms, a short hoodless cape:
 {"subject":"character","accessories":[],"character":{"height_m":1.65,"build":"slim","pose":"arms_out","cloak":"short","hood":false}}
-For anything else, even an object made for someone to use, set subject to object.
+For a single continuously branching organism choose subject "branched_organic".
+Name its living body in body and describe the forks, limbs or stems growing from it in growth.
+For every manufactured item, assemblage of separate objects, stack, vessel or tool choose
+subject "object". An attached piece of hardware is a separate component. An unbranched
+solid or shell also uses subject "object".
 First list components if the text identifies two or more connected pieces or distinct
 anatomical regions of the object. A single named object can have several such pieces.
 Keep each identifiable role, including the load-bearing part and the part it carries.
@@ -290,7 +305,7 @@ taper asymmetrically or shift toward one side. Such a solid cannot be revolved a
 fixed axis. Extract its bottom and top end independently: flat for a planar base or
 cut face, rounded for a dome, pointed for a sharp tip. For top_lean copy an explicit displacement
 of the highest point: back (+Y), front (-Y), right (+X), left (-X); otherwise as_drawn.
-Choose "general" for assemblies, objects with holes or branches, turned
+Choose "general" for assemblies, mechanical frames, objects with holes, turned
 objects, or shapes with a constant outline along their length."""
 
 OBJECT_PLACEMENT = """Build objects from the ground up. Each part's support locates its underside:
@@ -368,6 +383,13 @@ class _InvalidObjectHints(ValueError):
 
 
 def read_subject(data, detail):
+    if isinstance(data, dict) and data.get("subject") == "branched_organic":
+        if data.keys() != {"subject", "body", "growth"} or any(
+            not isinstance(data[key], str) or not data[key].strip() or len(data[key]) > limit
+            for key, limit in (("body", 80), ("growth", 160))
+        ):
+            raise ValueError("Name the individual organic body and its branching growth")
+        return None, [], {"body": data["body"], "growth": data["growth"]}
     if isinstance(data, dict) and data.get("subject") == "object":
         try:
             roles = read_components(data.get("components", []))
@@ -505,6 +527,17 @@ class Planner:
             if figure is not None and not accessories:
                 return figure
         if figure is None:
+            if construction and "growth" in construction:
+                return self._plan(
+                    prompt,
+                    f"Body and connected growth: {json.dumps(construction, ensure_ascii=False)}.\n"
+                    f"Requested detail: {detail}. {DETAIL_BRIEFS[detail]}\n",
+                    SCULPT_RECIPE,
+                    lambda data: sculpt_scene(data, detail),
+                    instructions=SCULPT_INSTRUCTIONS,
+                    num_ctx=4096,
+                    num_predict=2400,
+                )
             diameters = {
                 float(value.replace(",", ".")) / METRIC_UNIT[unit.casefold()]
                 for value, unit in DIAMETER.findall(prompt)
@@ -591,11 +624,12 @@ class Planner:
         if type(index) is not int or not 0 <= index < len(scene.parts):
             raise ValueError("Выберите существующую деталь")
         original = scene.parts[index]
-        parts = scene.data()["parts"]
+        # Keep large photo/animation payloads local to the editable document.
+        parts = [p.data(include_geometry=False) for p in scene.parts]
         for other, part in enumerate(parts):
             if other != index:
-                part.pop("sections", None)
-                part.pop("outline", None)
+                for key in ("sections", "outline", "nodes"):
+                    part.pop(key, None)
             elif part.get("sections"):
                 part["sections"] = [dict(zip(LOFT_COORDS, row)) for row in part["sections"]]
         context = json.dumps(

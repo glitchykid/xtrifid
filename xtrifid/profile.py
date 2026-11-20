@@ -18,14 +18,14 @@ def _check_index(index, points):
         raise ValueError("Выберите существующую точку профиля")
 
 
-def profile_guide(part, index, mode, detail="medium"):
+def profile_guide(part, index, mode, detail="medium", style="standard"):
     """World-space polyline on this mesh: a vertical edge, a closed ring, or a pole."""
     section = unit_profile(part)
     _check_index(index, section)
-    vertices = build(part, mode, detail).vertices
+    vertices = build(part, mode, detail, style).vertices
     if part.shape in ("box", "extrusion"):
         return vertices[[index, index + len(section)]]
-    ring = ring_indices(section, radial_segments(mode, detail))[index]
+    ring = ring_indices(section, radial_segments(mode, detail, style))[index]
     if len(ring) == 1:
         return vertices[ring.start : ring.stop]
     return vertices[[*ring, ring.start]]

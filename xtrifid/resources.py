@@ -115,10 +115,10 @@ def capacity(proc=Path("/proc"), *, pid=0):
         return Capacity(0, 1)
 
 
-def mesh_triangle_budget():
+def mesh_triangle_budget(extra_bytes=0):
     # Reserve for GTK, the existing scene and renderer setup. A triangle can
     # temporarily occupy both Python objects and several separate GL buffers.
-    remaining = max(0, capacity().headroom - 256 * MIB)
+    remaining = max(0, capacity().headroom - 256 * MIB - extra_bytes)
     return min(150_000, remaining // 8192)
 
 

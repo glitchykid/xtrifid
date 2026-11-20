@@ -61,7 +61,7 @@ class DetailTests(unittest.TestCase):
             self.assertEqual(scene.detail, "medium")
             high = replace(scene, detail="high")
             save_project(path, high, mode)
-            self.assertEqual(json.loads(path.read_text())["version"], 3)
+            self.assertEqual(json.loads(path.read_text())["version"], 4)
             compatible = json.loads(path.read_text()) | {"version": 2}
             path.write_text(json.dumps(compatible))
             self.assertEqual(load_project(path), (high, mode))
@@ -213,6 +213,13 @@ class DetailWindowTests(unittest.TestCase):
         ):
             self.assertIs(original, current)
         self.assertEqual(w.doc.scene.parts[0].shape, "box")
+        ranges = view.ranges
+        with (
+            patch("xtrifid.viewport.np.column_stack", side_effect=MemoryError),
+            self.assertRaisesRegex(ValueError, "памяти"),
+        ):
+            w.install(replacement, "game")
+        self.assertIs(view.ranges, ranges)
 
     def test_new_small_model_can_replace_unaffordable_old_scene(self):
         w = self.window

@@ -64,9 +64,9 @@ class LoftEditor(Gtk.Expander):
             self.text = [f.get_text() for f in self.fields]
             self.changed()
 
-    def guide(self, mode, detail):
+    def guide(self, mode, detail, style="standard"):
         z, rx, ry, x, y = local_sections(self.part)[self.number.get_value_as_int() - 1]
-        angles = np.linspace(0, tau, radial_segments(mode, detail) + 1) if rx else [0]
+        angles = np.linspace(0, tau, radial_segments(mode, detail, style) + 1) if rx else [0]
         points = np.column_stack(
             (x + rx * np.sin(angles), y - ry * np.cos(angles), np.full(len(angles), z))
         )

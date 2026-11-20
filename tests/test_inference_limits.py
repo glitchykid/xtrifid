@@ -132,16 +132,24 @@ class InferenceBudgetTests(PlannerHTTPCase):
         self.assertFalse(self.calls)
 
     def test_wall_clock_limit_releases_the_active_slot_on_a_stalled_response(self):
-        release = Event()
+        watch_started, release = Event(), Event()
+        current = [1.0]
+
+        def simulated_time():
+            instant = current[0]
+            watch_started.set()
+            return instant
 
         def stalled():
+            self.assertTrue(watch_started.wait(3))
+            current[0] += ollama.CHAT_TIMEOUT + 1
             release.wait(3)
             return None
 
         self.answers.append(stalled)
         try:
             with (
-                patch.object(ollama, "CHAT_TIMEOUT", 0.03),
+                patch.object(ollama, "time", Mock(monotonic=simulated_time)),
                 patch.object(ollama, "WATCH_INTERVAL", 0.02),
                 self.assertRaisesRegex(PlannerError, "время"),
             ):

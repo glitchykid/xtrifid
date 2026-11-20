@@ -6,7 +6,7 @@ from math import cos, pi, radians, sin, tau
 
 import numpy as np
 
-from .model import DETAILS, MODES
+from .model import DETAILS, MODES, STYLES
 from .organic import organic_mesh, organic_triangle_bound
 from .polygon import triangulate, turn
 from .resources import mesh_triangle_budget
@@ -15,15 +15,27 @@ from .rings import bridge
 _SEGMENTS = {"game": (8, 16, 32), "render": (24, 48, 64)}
 
 
-def radial_segments(mode, detail="medium"):
-    if mode not in MODES or detail not in DETAILS:
+_FACET_SEGMENTS = {"game": (4, 8, 16), "render": (8, 16, 32)}
+
+
+def radial_segments(mode, detail="medium", style="standard"):
+    if mode not in MODES or detail not in DETAILS or style not in STYLES:
         raise ValueError("Неизвестный профиль или уровень детализации")
-    return _SEGMENTS[mode][DETAILS.index(detail)]
+    table = _FACET_SEGMENTS if style == "low_poly" else _SEGMENTS
+    return table[mode][DETAILS.index(detail)]
 
 
-def triangle_bound(part, mode, detail):
+def triangle_bound(part, mode, detail, style="standard"):
     """Estimate the triangulated working set without allocating the mesh."""
-    n = radial_segments(mode, detail)
+    n = radial_segments(mode, detail, style)
+    if part.shape == "surface":
+        return part.surface.triangles
+    if part.shape in ("sculpt", "reference"):
+        from . import sculpt
+
+        return sculpt.triangle_bound(part, mode, detail, low_poly=style == "low_poly")
+    if part.shape == "human":
+        n = max(8, n)
     if part.shape == "box":
         return 12
     if part.shape == "extrusion":
@@ -48,11 +60,16 @@ class MeshBudgetError(ValueError):
 
 
 def check_scene_budget(scene, mode):
-    budget = mesh_triangle_budget()
+    extra_bytes = 0
+    if scene and any(p.texture for p in scene.parts):
+        from .textures import texture_working_bytes
+
+        extra_bytes = texture_working_bytes(scene.parts)
+    budget = mesh_triangle_budget(extra_bytes)
     if budget <= 0:
         raise MeshBudgetError("Недостаточно свободной памяти для построения сетки.")
     if scene is not None:
-        needed = sum(triangle_bound(p, mode, scene.detail) for p in scene.parts)
+        needed = sum(triangle_bound(p, mode, scene.detail, scene.style) for p in scene.parts)
         if needed > budget:
             raise MeshBudgetError(
                 f"Для сетки требуется до {needed:_} треугольников, текущий лимит {budget:_}. "
@@ -173,7 +190,12 @@ def rotation_matrix(rotation):
 def axis_bounds(part, detail, dimension):
     """Project a single part on a world axis without allocating its mesh."""
     axis = rotation_matrix(part.rotation)[dimension] * part.size
-    if part.shape in ("box", "extrusion"):
+    if part.shape in ("sculpt", "reference", "surface"):
+        # These parts normalize to a centred local bounding box. Use its support
+        # function for placement without allocating a volumetric grid.
+        half = float(np.sum(np.abs(axis))) / 2
+        lo, hi = -half, half
+    elif part.shape in ("box", "extrusion"):
         projected = unit_profile(part) @ axis[:2]
         half = abs(axis[2]) / 2
         lo, hi = projected.min() - half, projected.max() + half
@@ -206,20 +228,33 @@ def height_bounds(part, detail):
     return axis_bounds(part, detail, 2)
 
 
-def build(part, mode, detail="medium"):
-    if triangle_bound(part, mode, detail) >= 4096:
-        return _build(part, mode, detail)
-    return _small_mesh(part, mode, detail)
+def build(part, mode, detail="medium", style="standard"):
+    if (
+        part.shape in ("reference", "sculpt", "surface")
+        or triangle_bound(part, mode, detail, style) >= 4096
+    ):
+        return _build(part, mode, detail, style)
+    return _small_mesh(part, mode, detail, style)
 
 
-def _build(part, mode, detail):
-    segments = radial_segments(mode, detail)
-    if part.shape in ("box", "extrusion"):
+def _build(part, mode, detail, style):
+    segments = radial_segments(mode, detail, style)
+    if part.shape == "surface":
+        vertices, faces, smooth = part.surface.mesh()
+    elif part.shape in ("sculpt", "reference"):
+        from . import sculpt
+
+        vertices, faces, smooth = sculpt.mesh(part, mode, detail, low_poly=style == "low_poly")
+    elif part.shape in ("box", "extrusion"):
         vertices, faces, smooth = prism(part)
     elif part.shape in ("sphere", "torus", "tube", "lathe", "cone", "cylinder"):
         vertices, faces, smooth = radial(part, segments)
     else:
-        vertices, faces, smooth = organic_mesh(part, segments)
+        vertices, faces, smooth = organic_mesh(
+            part, max(8, segments) if part.shape == "human" else segments
+        )
+    if style == "low_poly":
+        smooth = [False] * len(faces)
     if mode == "game":
         smooth = [s for face, s in zip(faces, smooth) for _ in range(len(face) - 2)]
         faces = list(triangles(faces))

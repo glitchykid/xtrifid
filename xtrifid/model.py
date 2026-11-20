@@ -1,11 +1,17 @@
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, replace
 from math import isfinite
+from typing import TYPE_CHECKING
 
 from .organic import MAX_SECTIONS, ORGANIC_SHAPES
 from .polygon import close_meridian, normalize_outline, simplify_outline, triangulate
 
+if TYPE_CHECKING:
+    from .surface import Surface
+    from .textures import TextureSpec
+
 PRIMITIVES = ("box", "cylinder", "sphere", "cone", "torus", "extrusion", "lathe", "tube")
-SHAPES = PRIMITIVES + ORGANIC_SHAPES
+SHAPES = PRIMITIVES + ORGANIC_SHAPES + ("surface", "sculpt", "reference")
+STYLES = ("standard", "low_poly")
 MODES = ("game", "render")
 DETAILS = ("low", "medium", "high")
 POSES = ("standing", "walking", "arms_out")
@@ -69,6 +75,12 @@ class Part:
     pose: str = "standing"
     body_scales: tuple = ()
     physique: str = "neutral"
+
+    masks: tuple = ()
+    nodes: tuple = ()
+    surface: "Surface | None" = None
+    texture: "TextureSpec | None" = None
+    rounded: bool = False
 
     @classmethod
     def parse(cls, data, *, simplify_profiles=False):
@@ -148,6 +160,25 @@ class Part:
             scales = tuple(
                 (region, value) for region, value in zip(BODY_REGIONS, values) if value != 1
             )
+        nodes, masks, surface, texture = (), (), None, None
+        rounded = data.get("rounded", False)
+        if type(rounded) is not bool or (rounded and shape != "reference"):
+            raise ValueError("Округление сечений доступно для силуэтов")
+        if shape in ("sculpt", "reference"):
+            from .sculpt import parse_masks, parse_nodes
+
+            if shape == "sculpt":
+                nodes = parse_nodes(data.get("nodes"))
+            else:
+                masks = parse_masks(data.get("masks"))
+        if shape == "surface":
+            from .surface import Surface
+
+            surface = Surface.parse(data.get("surface"))
+        if "texture" in data:
+            from .textures import TextureSpec
+
+            texture = TextureSpec.parse(data["texture"])
         return cls(
             name.strip(),
             shape,
@@ -161,26 +192,40 @@ class Part:
             pose,
             scales,
             physique,
+            masks,
+            nodes,
+            surface,
+            texture,
+            rounded,
         )
 
-    def data(self):
-        data = asdict(self)
-        if not self.outline:
-            del data["outline"]
-        if self.inner_diameter is None:
-            del data["inner_diameter"]
-        if not self.sections:
-            del data["sections"]
-        if not self.cloak_back:
-            del data["cloak_back"]
-        if self.physique == "neutral":
-            del data["physique"]
-        if self.shape != "human":
-            del data["pose"]
-        if self.body_scales:
-            data["body_scales"] = dict(self.body_scales)
-        else:
-            del data["body_scales"]
+    def data(self, *, include_geometry=True):
+        data = {k: getattr(self, k) for k in ("name", "shape", "size", "center", "rotation")}
+        if self.outline:
+            data["outline"] = self.outline
+        if self.inner_diameter is not None:
+            data["inner_diameter"] = self.inner_diameter
+        if self.sections:
+            data["sections"] = self.sections
+        if self.cloak_back:
+            data["cloak_back"] = True
+        if self.shape == "human":
+            data["pose"] = self.pose
+            if self.physique != "neutral":
+                data["physique"] = self.physique
+            if self.body_scales:
+                data["body_scales"] = dict(self.body_scales)
+        if self.nodes:
+            data["nodes"] = self.nodes
+        if self.rounded:
+            data["rounded"] = True
+        if include_geometry:
+            if self.masks:
+                data["masks"] = self.masks
+            if self.surface:
+                data["surface"] = self.surface.data()
+            if self.texture:
+                data["texture"] = self.texture.data()
         return data
 
 
@@ -188,8 +233,11 @@ class Part:
 class Scene:
     parts: tuple
     detail: str = "medium"
+    style: str = "standard"
 
     def __post_init__(self):
+        if self.style not in STYLES:
+            raise ValueError("Неизвестный стиль сетки")
         if self.detail not in DETAILS:
             raise ValueError("Неизвестный уровень детализации")
 
@@ -204,10 +252,14 @@ class Scene:
         if not isinstance(raw, list) or not 1 <= len(raw) <= MAX_PARTS:
             raise ValueError(f"Ожидалось от 1 до {MAX_PARTS} деталей")
         parts = tuple(Part.parse(p, simplify_profiles=simplify_profiles) for p in raw)
-        return cls(parts, data.get("detail", "medium"))
+        return cls(parts, data.get("detail", "medium"), data.get("style", "standard"))
 
     def data(self):
-        return {"parts": [p.data() for p in self.parts], "detail": self.detail}
+        return {
+            "parts": [p.data() for p in self.parts],
+            "detail": self.detail,
+            "style": self.style,
+        }
 
 
 class Document:
