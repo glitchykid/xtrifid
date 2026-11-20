@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb xauth dbus-daemon && install -d -m 1777 /tmp/.X11-unix && rm -rf /var/lib/apt/lists/*
 COPY xtrifid ./xtrifid
 COPY tests ./tests
+COPY examples/art-studies/*.xtri ./examples/art-studies/
 COPY pyproject.toml .
 USER 1000:1000
 ENV GTK_A11Y=none GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1

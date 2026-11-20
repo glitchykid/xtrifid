@@ -4,6 +4,8 @@
 
 Build editable 3D models from text or image references in GTK. Inspect the geometry, simulate cloth, hair and liquids, and assign materials and surface detail to individual parts. Dimensions are in metres. The interface is in Russian.
 
+Seven editable Game Ready studies for Xtrifid 0.7.0 include a moon sword, a retro blaster, a peacock fan, a marsh creature, a lantern, an orbital spell and a breaking wave. Open any `.xtri` to edit its parts or materials. [View the models](https://github.com/glitchykid/xtrifid/blob/main/examples/art-studies/gallery.jpg) · [Download XTRI and GLB files](https://github.com/glitchykid/xtrifid/releases/download/art-studies-1/xtrifid-art-studies.zip)
+
 ## Run the Linux executable
 
 Download the executable for x86-64 Linux with glibc 2.39 or newer, a graphical desktop and OpenGL 3.3. Linux Mint 22 and Ubuntu 24.04 meet the distribution requirement. Python, GTK and the CPU version of Ollama are included. [Download Xtrifid for Linux](https://github.com/glitchykid/xtrifid/releases/latest/download/xtrifid-linux-x86_64)

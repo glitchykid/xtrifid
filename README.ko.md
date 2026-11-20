@@ -4,6 +4,8 @@
 
 글이나 참고 이미지로 편집 가능한 3D 모델을 만드는 GTK 앱입니다. 메시를 살펴보고 천·머리카락·액체의 움직임을 시뮬레이션하거나 부품마다 재질과 표면 요철을 지정할 수 있습니다. 길이 단위는 미터이고 화면 언어는 러시아어입니다.
 
+Xtrifid 0.7.0에서 열 수 있는 Game Ready 예제 7종을 제공합니다. 달의 검, 복고풍 블래스터, 공작 깃털 부채, 늪지 괴물, 등불, 궤도를 그리는 마법, 부서지는 파도가 들어 있습니다. `.xtri` 파일을 열어 각 부품의 형태와 재질을 바꿀 수 있습니다. [모델 미리 보기](https://github.com/glitchykid/xtrifid/blob/main/examples/art-studies/gallery.jpg) · [XTRI 및 GLB 다운로드](https://github.com/glitchykid/xtrifid/releases/download/art-studies-1/xtrifid-art-studies.zip)
+
 ## Linux 실행 파일
 
 x86-64 Linux에서 glibc 2.39 이상, 그래픽 데스크톱, OpenGL 3.3이 필요합니다. Linux Mint 22와 Ubuntu 24.04는 이 배포판 요건을 충족합니다. 실행 파일에는 Python, GTK, CPU용 Ollama가 들어 있습니다. [Linux용 Xtrifid 다운로드](https://github.com/glitchykid/xtrifid/releases/latest/download/xtrifid-linux-x86_64)

@@ -3,5 +3,8 @@
 !xtrifid/**
 !tests/
 !tests/**
+!examples/
+!examples/art-studies/
+!examples/art-studies/*.xtri
 !pyproject.toml
 **/__pycache__/

@@ -4,6 +4,8 @@
 
 文章や参考画像から編集可能な 3D モデルを作る GTK アプリです。メッシュを確認し、布・髪・液体の動きを試したり、部品ごとに材質や表面の凹凸を設定したりできます。長さの単位はメートルで、画面表示はロシア語です。
 
+Xtrifid 0.7.0 用に、月の剣、レトロなブラスター、クジャクの羽の扇、沼の怪物、ランタン、軌道を描く魔法、砕ける波の7つの Game Ready 作例を用意しました。`.xtri` を開くと、各パーツの形や材質を編集できます。 [モデル一覧](https://github.com/glitchykid/xtrifid/blob/main/examples/art-studies/gallery.jpg) · [XTRI・GLB をダウンロード](https://github.com/glitchykid/xtrifid/releases/download/art-studies-1/xtrifid-art-studies.zip)
+
 ## Linux 用実行ファイル
 
 glibc 2.39 以降、グラフィカルデスクトップ、OpenGL 3.3 を備えた x86-64 Linux 用の実行ファイルです。Linux Mint 22 と Ubuntu 24.04 はこの要件を満たします。Python、GTK、CPU 版の Ollama を同梱しています。 [Linux 版 Xtrifid をダウンロード](https://github.com/glitchykid/xtrifid/releases/latest/download/xtrifid-linux-x86_64)
