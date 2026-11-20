@@ -16,6 +16,7 @@ class ArtStudiesTests(unittest.TestCase):
         expected = {
             "moon-sword",
             "prism-blaster",
+            "parade-sidearm",
             "fan-relic",
             "marsh-creature",
             "wayfarer-lantern",

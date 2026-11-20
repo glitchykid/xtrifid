@@ -4,7 +4,7 @@
 
 Создавайте редактируемые 3D-модели по тексту или референсам в GTK. Проверяйте сетку, моделируйте движение ткани, волос и жидкостей и назначайте отдельным деталям материалы и рельеф поверхности. Размеры задаются в метрах. Интерфейс на русском языке.
 
-В коллекции для Xtrifid 0.7.0 семь готовых сцен Game Ready. Среди них лунный меч, ретробластер, веер из павлиньих перьев, болотный монстр, фонарь, орбитальное заклинание и морская волна. Откройте любой файл `.xtri`, чтобы изменить его детали или материалы. [Посмотреть модели](https://github.com/glitchykid/xtrifid/blob/main/examples/art-studies/gallery.jpg) · [Скачать XTRI и GLB](https://github.com/glitchykid/xtrifid/releases/download/art-studies-1/xtrifid-art-studies.zip)
+В коллекции для Xtrifid 0.7.0 восемь готовых сцен Game Ready. Среди них лунный меч, ретробластер, парадный пистолет, веер из павлиньих перьев, болотный монстр, фонарь, орбитальное заклинание и морская волна. Откройте любой файл `.xtri`, чтобы изменить его детали или материалы. [Посмотреть модели](https://github.com/glitchykid/xtrifid/blob/main/examples/art-studies/gallery.jpg) · [Скачать XTRI и GLB](https://github.com/glitchykid/xtrifid/releases/download/art-studies-1/xtrifid-art-studies.zip)
 
 ## Исполняемый файл для Linux
 

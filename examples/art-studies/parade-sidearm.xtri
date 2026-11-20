@@ -1,0 +1,2006 @@
+{
+  "version": 5,
+  "mode": "game",
+  "parts": [
+    {
+      "name": "Резной орех · силуэт коршуна",
+      "shape": "surface",
+      "size": [
+        0.7190000000000001,
+        0.1,
+        0.346
+      ],
+      "center": [
+        -0.037500000000000006,
+        0.0,
+        0.248
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "surface": {
+        "vertices": "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",
+        "faces": "GwAAAAAAAAABAAAA/////xsAAAABAAAAAgAAAP////8bAAAAAgAAAAMAAAD/////GwAAAAMAAAAEAAAA/////xsAAAAEAAAABQAAAP////8bAAAABQAAAAYAAAD/////GwAAAAYAAAAHAAAA/////xsAAAAHAAAACAAAAP////8JAAAACgAAAAsAAAD/////CQAAAAsAAAAMAAAA/////wkAAAAMAAAADQAAAP////8JAAAADQAAAA4AAAD/////CQAAAA4AAAAPAAAA/////wkAAAAPAAAAEAAAAP////8IAAAACQAAABAAAAD/////GwAAAAgAAAAQAAAA/////xAAAAARAAAAEgAAAP////8QAAAAEgAAABMAAAD/////EAAAABMAAAAUAAAA/////xAAAAAUAAAAFQAAAP////8QAAAAFQAAABYAAAD/////EAAAABYAAAAXAAAA/////xAAAAAXAAAAGAAAAP////8QAAAAGAAAABkAAAD/////GwAAABAAAAAZAAAA/////xkAAAAaAAAAGwAAAP////8BAAAAAAAAABwAAAAdAAAAAgAAAAEAAAAdAAAAHgAAAAMAAAACAAAAHgAAAB8AAAAEAAAAAwAAAB8AAAAgAAAABQAAAAQAAAAgAAAAIQAAAAYAAAAFAAAAIQAAACIAAAAHAAAABgAAACIAAAAjAAAACAAAAAcAAAAjAAAAJAAAAAkAAAAIAAAAJAAAACUAAAAKAAAACQAAACUAAAAmAAAACwAAAAoAAAAmAAAAJwAAAAwAAAALAAAAJwAAACgAAAANAAAADAAAACgAAAApAAAADgAAAA0AAAApAAAAKgAAAA8AAAAOAAAAKgAAACsAAAAQAAAADwAAACsAAAAsAAAAEQAAABAAAAAsAAAALQAAABIAAAARAAAALQAAAC4AAAATAAAAEgAAAC4AAAAvAAAAFAAAABMAAAAvAAAAMAAAABUAAAAUAAAAMAAAADEAAAAWAAAAFQAAADEAAAAyAAAAFwAAABYAAAAyAAAAMwAAABgAAAAXAAAAMwAAADQAAAAZAAAAGAAAADQAAAA1AAAAGgAAABkAAAA1AAAANgAAABsAAAAaAAAANgAAADcAAAAAAAAAGwAAADcAAAAcAAAAHQAAABwAAAA4AAAAOQAAAB4AAAAdAAAAOQAAADoAAAAfAAAAHgAAADoAAAA7AAAAIAAAAB8AAAA7AAAAPAAAACEAAAAgAAAAPAAAAD0AAAAiAAAAIQAAAD0AAAA+AAAAIwAAACIAAAA+AAAAPwAAACQAAAAjAAAAPwAAAEAAAAAlAAAAJAAAAEAAAABBAAAAJgAAACUAAABBAAAAQgAAACcAAAAmAAAAQgAAAEMAAAAoAAAAJwAAAEMAAABEAAAAKQAAACgAAABEAAAARQAAACoAAAApAAAARQAAAEYAAAArAAAAKgAAAEYAAABHAAAALAAAACsAAABHAAAASAAAAC0AAAAsAAAASAAAAEkAAAAuAAAALQAAAEkAAABKAAAALwAAAC4AAABKAAAASwAAADAAAAAvAAAASwAAAEwAAAAxAAAAMAAAAEwAAABNAAAAMgAAADEAAABNAAAATgAAADMAAAAyAAAATgAAAE8AAAA0AAAAMwAAAE8AAABQAAAANQAAADQAAABQAAAAUQAAADYAAAA1AAAAUQAAAFIAAAA3AAAANgAAAFIAAABTAAAAHAAAADcAAABTAAAAOAAAADkAAAA4AAAAVAAAAFUAAAA6AAAAOQAAAFUAAABWAAAAOwAAADoAAABWAAAAVwAAADwAAAA7AAAAVwAAAFgAAAA9AAAAPAAAAFgAAABZAAAAPgAAAD0AAABZAAAAWgAAAD8AAAA+AAAAWgAAAFsAAABAAAAAPwAAAFsAAABcAAAAQQAAAEAAAABcAAAAXQAAAEIAAABBAAAAXQAAAF4AAABDAAAAQgAAAF4AAABfAAAARAAAAEMAAABfAAAAYAAAAEUAAABEAAAAYAAAAGEAAABGAAAARQAAAGEAAABiAAAARwAAAEYAAABiAAAAYwAAAEgAAABHAAAAYwAAAGQAAABJAAAASAAAAGQAAABlAAAASgAAAEkAAABlAAAAZgAAAEsAAABKAAAAZgAAAGcAAABMAAAASwAAAGcAAABoAAAATQAAAEwAAABoAAAAaQAAAE4AAABNAAAAaQAAAGoAAABPAAAATgAAAGoAAABrAAAAUAAAAE8AAABrAAAAbAAAAFEAAABQAAAAbAAAAG0AAABSAAAAUQAAAG0AAABuAAAAUwAAAFIAAABuAAAAbwAAADgAAABTAAAAbwAAAFQAAABVAAAAVAAAAG8AAAD/////VgAAAFUAAABvAAAA/////1cAAABWAAAAbwAAAP////9YAAAAVwAAAG8AAAD/////WQAAAFgAAABvAAAA/////1oAAABZAAAAbwAAAP////9bAAAAWgAAAG8AAAD/////XAAAAFsAAABvAAAA/////18AAABeAAAAXQAAAP////9gAAAAXwAAAF0AAAD/////YQAAAGAAAABdAAAA/////2IAAABhAAAAXQAAAP////9jAAAAYgAAAF0AAAD/////ZAAAAGMAAABdAAAA/////2QAAABdAAAAXAAAAP////9kAAAAXAAAAG8AAAD/////ZgAAAGUAAABkAAAA/////2cAAABmAAAAZAAAAP////9oAAAAZwAAAGQAAAD/////aQAAAGgAAABkAAAA/////2oAAABpAAAAZAAAAP////9rAAAAagAAAGQAAAD/////bAAAAGsAAABkAAAA/////20AAABsAAAAZAAAAP////9tAAAAZAAAAG8AAAD/////bwAAAG4AAABtAAAA/////w==",
+        "smooth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+      },
+      "texture": {
+        "material": "wood",
+        "seed": 118,
+        "resolution": 256,
+        "color_a": "#502c27",
+        "color_b": "#bf8451",
+        "scale": 0.65,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.49,
+          "metallic": 0,
+          "normal_strength": 0.35
+        }
+      }
+    },
+    {
+      "name": "Серебро венца",
+      "shape": "surface",
+      "size": [
+        0.5880000000000001,
+        0.11359999999999999,
+        0.16729000000000005
+      ],
+      "center": [
+        0.10800000000000001,
+        0.0,
+        0.433645
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "surface": {
+        "vertices": "AAAAAAAA4L8sbA4kWmHTPygMbToGkdO/AAAAAAAA4L8sbA4kWmHTP2hEgBKf7ai/AAAAAAAA4L+9azvch87IP2Z+7jdhx7M/AAAAAAAA4L+9azvch87Iv2Z+7jdhx7M/AAAAAAAA4L8sbA4kWmHTv2hEgBKf7ai/AAAAAAAA4L8sbA4kWmHTvygMbToGkdO/AAAAAAAA4L8BtXden0HHv/CNe2avytu/AAAAAAAA4L8BtXden0HHP/CNe2avytu/v2ZHLUL+2r+DRCtsDiTaPxq8RWvO59S/v2ZHLUL+2r+DRCtsDiTaP9S77OJLiZQ/v2ZHLUL+2r8hDauC6rrQP939ghDxT8g/v2ZHLUL+2r8hDauC6rrQv939ghDxT8g/v2ZHLUL+2r+DRCtsDiTav9S77OJLiZQ/v2ZHLUL+2r+DRCtsDiTavxq8RWvO59S/v2ZHLUL+2r+cuAC1d17PvwAAAAAAAOC/v2ZHLUL+2r+cuAC1d17PPwAAAAAAAOC/xZXuDSgT179bYXMg0QrbP29uZ0H+wdO/xZXuDSgT179bYXMg0QrbP7ATtR8okqk/xZXuDSgT178HXTVSmk7RPzadJdZG48w/xZXuDSgT178HXTVSmk7RvzadJdZG48w/xZXuDSgT179bYXMg0Qrbv7ATtR8okqk/xZXuDSgT179bYXMg0Qrbv29uZ0H+wdO/xZXuDSgT1782BxKtsDnQv+d2FuQfPN+/xZXuDSgT1782BxKtsDnQP+d2FuQfPN+/ddQi5K/ZwT/57VJPxm/XP3Z5AMkZY8S/ddQi5K/ZwT/57VJPxm/XP6Jfb+JrZsM/ddQi5K/ZwT/YOhgotv/NPzL4LeSpctM/ddQi5K/ZwT/YOhgotv/NvzL4LeSpctM/ddQi5K/ZwT/57VJPxm/Xv6Jfb+JrZsM/ddQi5K/ZwT/57VJPxm/Xv3Z5AMkZY8S/ddQi5K/ZwT8rt5bFuh/Mv/syXE/uI9S/ddQi5K/ZwT8rt5bFuh/MP/syXE/uI9S/fs2OWoT81T/Hb5d6Mn7bP4WQZUup8cC/fs2OWoT81T/Hb5d6Mn7bP3UaQFu9us0/fs2OWoT81T/7hPo5cpjRP9H1QGO6TNo/fs2OWoT81T/7hPo5cpjRv9H1QGO6TNo/fs2OWoT81T/Hb5d6Mn7bv3UaQFu9us0/fs2OWoT81T/Hb5d6Mn7bv4WQZUup8cC/fs2OWoT81T+r3FoW637Qv/syXE/uI9S/fs2OWoT81T+r3FoW637QP/syXE/uI9S/iSvdG1Am3j8AAAAAAADgP3mQZUup8cC/iSvdG1Am3j8AAAAAAADgP7K6Lzm/sNI/iSvdG1Am3j97FK5H4XrUPwAAAAAAAOA/iSvdG1Am3j97FK5H4XrUvwAAAAAAAOA/iSvdG1Am3j8AAAAAAADgv7K6Lzm/sNI/iSvdG1Am3j8AAAAAAADgv3mQZUup8cC/iSvdG1Am3j8zMzMzMzPTv7oJJJWeDda/iSvdG1Am3j8zMzMzMzPTP7oJJJWeDda/AAAAAAAA4D/lt0s9Gb/dP0NhaNMxiLy/AAAAAAAA4D/lt0s9Gb/dP9+TQCTXHdI/AAAAAAAA4D+7TNTAqQnTP9QqeWIlfd4/AAAAAAAA4D+7TNTAqQnTv9QqeWIlfd4/AAAAAAAA4D/lt0s9Gb/dv9+TQCTXHdI/AAAAAAAA4D/lt0s9Gb/dv0NhaNMxiLy/AAAAAAAA4D/vB8ckD9nRv29uZ0H+wdO/AAAAAAAA4D/vB8ckD9nRP29uZ0H+wdO/AAAAAAAA4L8AAAAAAAAAALUUvRy6rsa/AAAAAAAA4D8AAAAAAAAAAB33zF6V97U/",
+        "faces": "AAAAAAEAAAAJAAAACAAAAAEAAAACAAAACgAAAAkAAAACAAAAAwAAAAsAAAAKAAAAAwAAAAQAAAAMAAAACwAAAAQAAAAFAAAADQAAAAwAAAAFAAAABgAAAA4AAAANAAAABgAAAAcAAAAPAAAADgAAAAcAAAAAAAAACAAAAA8AAAAIAAAACQAAABEAAAAQAAAACQAAAAoAAAASAAAAEQAAAAoAAAALAAAAEwAAABIAAAALAAAADAAAABQAAAATAAAADAAAAA0AAAAVAAAAFAAAAA0AAAAOAAAAFgAAABUAAAAOAAAADwAAABcAAAAWAAAADwAAAAgAAAAQAAAAFwAAABAAAAARAAAAGQAAABgAAAARAAAAEgAAABoAAAAZAAAAEgAAABMAAAAbAAAAGgAAABMAAAAUAAAAHAAAABsAAAAUAAAAFQAAAB0AAAAcAAAAFQAAABYAAAAeAAAAHQAAABYAAAAXAAAAHwAAAB4AAAAXAAAAEAAAABgAAAAfAAAAGAAAABkAAAAhAAAAIAAAABkAAAAaAAAAIgAAACEAAAAaAAAAGwAAACMAAAAiAAAAGwAAABwAAAAkAAAAIwAAABwAAAAdAAAAJQAAACQAAAAdAAAAHgAAACYAAAAlAAAAHgAAAB8AAAAnAAAAJgAAAB8AAAAYAAAAIAAAACcAAAAgAAAAIQAAACkAAAAoAAAAIQAAACIAAAAqAAAAKQAAACIAAAAjAAAAKwAAACoAAAAjAAAAJAAAACwAAAArAAAAJAAAACUAAAAtAAAALAAAACUAAAAmAAAALgAAAC0AAAAmAAAAJwAAAC8AAAAuAAAAJwAAACAAAAAoAAAALwAAACgAAAApAAAAMQAAADAAAAApAAAAKgAAADIAAAAxAAAAKgAAACsAAAAzAAAAMgAAACsAAAAsAAAANAAAADMAAAAsAAAALQAAADUAAAA0AAAALQAAAC4AAAA2AAAANQAAAC4AAAAvAAAANwAAADYAAAAvAAAAKAAAADAAAAA3AAAAAQAAAAAAAAA4AAAA/////wIAAAABAAAAOAAAAP////8DAAAAAgAAADgAAAD/////BAAAAAMAAAA4AAAA/////wUAAAAEAAAAOAAAAP////8GAAAABQAAADgAAAD/////BwAAAAYAAAA4AAAA/////wAAAAAHAAAAOAAAAP////8wAAAAMQAAADkAAAD/////MQAAADIAAAA5AAAA/////zIAAAAzAAAAOQAAAP////8zAAAANAAAADkAAAD/////NAAAADUAAAA5AAAA/////zUAAAA2AAAAOQAAAP////82AAAANwAAADkAAAD/////NwAAADAAAAA5AAAA/////w==",
+        "smooth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+      },
+      "texture": {
+        "material": "metal",
+        "seed": 31,
+        "resolution": 256,
+        "color_a": "#9caeb7",
+        "color_b": "#f6eed9",
+        "scale": 1.0,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.33,
+          "metallic": 0.84,
+          "normal_strength": 0.23
+        }
+      }
+    },
+    {
+      "name": "Синяя эмаль венца",
+      "shape": "surface",
+      "size": [
+        0.07500000000000001,
+        0.11392000000000001,
+        0.14168799999999993
+      ],
+      "center": [
+        0.3435,
+        0.0,
+        0.446644
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "surface": {
+        "vertices": "AwAAAAAA4L9FKEIRilDcP424r+18U9C/AwAAAAAA4L9FKEIRilDcP0VEP8nzQsg/AwAAAAAA4L8iqeKuEB/SP7LqrMsbE9o/AwAAAAAA4L8iqeKuEB/Sv7LqrMsbE9o/AwAAAAAA4L9FKEIRilDcv0VEP8nzQsg/AwAAAAAA4L9FKEIRilDcv424r+18U9C/AwAAAAAA4L+PfvSjH/3Qv95l11b4jd6/AwAAAAAA4L+PfvSjH/3QP95l11b4jd6/MvnFkl8s2b/MYQ5zmMPcP3FgQburGdC/MvnFkl8s2b/MYQ5zmMPcP7lU1ffanck/MvnFkl8s2b8nAdZ8s2jSP8ZdRY84+do/MvnFkl8s2b8nAdZ8s2jSv8ZdRY84+do/MvnFkl8s2b/MYQ5zmMPcv7lU1ffanck/MvnFkl8s2b/MYQ5zmMPcv3FgQburGdC/MvnFkl8s2b8UoQhFKELRv95l11b4jd6/MvnFkl8s2b8UoQhFKELRP95l11b4jd6/lDbQaQOd1j999KMf/ejfP7YQphG1v8+/lDbQaQOd1j999KMf/ejfP6LTYXAvMtA/lDbQaQOd1j9GaX0eJ2zUP6ly2rka6d8/lDbQaQOd1j9GaX0eJ2zUv6ly2rka6d8/lDbQaQOd1j999KMf/ejfv6LTYXAvMtA/lDbQaQOd1j999KMf/ejfv7YQphG1v8+/lDbQaQOd1j+ykpWsZCXTv2F2bYXf6N+/lDbQaQOd1j+ykpWsZCXTP2F2bYXf6N+/+f//////3z8AAAAAAADgP2OaOIzV1s+/+f//////3z8AAAAAAADgP3kYq62/PdA/+f//////3z97FK5H4XrUPwAAAAAAAOA/+f//////3z97FK5H4XrUvwAAAAAAAOA/+f//////3z8AAAAAAADgv3kYq62/PdA/+f//////3z8AAAAAAADgv2OaOIzV1s+/+f//////3z8zMzMzMzPTvwAAAAAAAOC/+f//////3z8zMzMzMzPTPwAAAAAAAOC/AwAAAAAA4L8AAAAAAAAAAKtZQCQMyKC/+f//////3z8AAAAAAAAAAODRsuM5lWQ/",
+        "faces": "AAAAAAEAAAAJAAAACAAAAAEAAAACAAAACgAAAAkAAAACAAAAAwAAAAsAAAAKAAAAAwAAAAQAAAAMAAAACwAAAAQAAAAFAAAADQAAAAwAAAAFAAAABgAAAA4AAAANAAAABgAAAAcAAAAPAAAADgAAAAcAAAAAAAAACAAAAA8AAAAIAAAACQAAABEAAAAQAAAACQAAAAoAAAASAAAAEQAAAAoAAAALAAAAEwAAABIAAAALAAAADAAAABQAAAATAAAADAAAAA0AAAAVAAAAFAAAAA0AAAAOAAAAFgAAABUAAAAOAAAADwAAABcAAAAWAAAADwAAAAgAAAAQAAAAFwAAABAAAAARAAAAGQAAABgAAAARAAAAEgAAABoAAAAZAAAAEgAAABMAAAAbAAAAGgAAABMAAAAUAAAAHAAAABsAAAAUAAAAFQAAAB0AAAAcAAAAFQAAABYAAAAeAAAAHQAAABYAAAAXAAAAHwAAAB4AAAAXAAAAEAAAABgAAAAfAAAAAQAAAAAAAAAgAAAA/////wIAAAABAAAAIAAAAP////8DAAAAAgAAACAAAAD/////BAAAAAMAAAAgAAAA/////wUAAAAEAAAAIAAAAP////8GAAAABQAAACAAAAD/////BwAAAAYAAAAgAAAA/////wAAAAAHAAAAIAAAAP////8YAAAAGQAAACEAAAD/////GQAAABoAAAAhAAAA/////xoAAAAbAAAAIQAAAP////8bAAAAHAAAACEAAAD/////HAAAAB0AAAAhAAAA/////x0AAAAeAAAAIQAAAP////8eAAAAHwAAACEAAAD/////HwAAABgAAAAhAAAA/////w==",
+        "smooth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+      },
+      "texture": {
+        "material": "paint",
+        "seed": 47,
+        "resolution": 256,
+        "color_a": "#192d47",
+        "color_b": "#304c73",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.31,
+          "metallic": 0.17,
+          "normal_strength": 0.13
+        }
+      }
+    },
+    {
+      "name": "Золотое ребро венца",
+      "shape": "surface",
+      "size": [
+        0.014000000000000012,
+        0.10400000000000001,
+        0.12934999999999997
+      ],
+      "center": [
+        0.307,
+        0.0,
+        0.442675
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "surface": {
+        "vertices": "AAAAAAAA4L9f6IVe6IXeP/pLAMe/KtC/AAAAAAAA4L9f6IVe6IXeP4JB3k7ZBM0/AAAAAAAA4L+YD+Wi5ojTP2jO0756it0/AAAAAAAA4L+YD+Wi5ojTv2jO0756it0/AAAAAAAA4L9f6IVe6IXev4JB3k7ZBM0/AAAAAAAA4L9f6IVe6IXev/pLAMe/KtC/AAAAAAAA4L+fvrY4WFDSv2ACOP5Vgd+/AAAAAAAA4L+fvrY4WFDSP2ACOP5Vgd+/kiRJkiRJsj8AAAAAAADgP2SaOIzV1s+/kiRJkiRJsj8AAAAAAADgP3kYq62/PdA/kiRJkiRJsj97FK5H4XrUPwAAAAAAAOA/kiRJkiRJsj97FK5H4XrUvwAAAAAAAOA/kiRJkiRJsj8AAAAAAADgv3kYq62/PdA/kiRJkiRJsj8AAAAAAADgv2SaOIzV1s+/kiRJkiRJsj8zMzMzMzPTvwAAAAAAAOC/kiRJkiRJsj8zMzMzMzPTPwAAAAAAAOC/AAAAAAAA4D8Q/MAP/MDfP4ybVIuAl8+/AAAAAAAA4D8Q/MAP/MDfPw0ZOS0VHtA/AAAAAAAA4D8A6eHWjFLUP/z2ZSBNwd8/AAAAAAAA4D8A6eHWjFLUv/z2ZSBNwd8/AAAAAAAA4D8Q/MAP/MDfvw0ZOS0VHtA/AAAAAAAA4D8Q/MAP/MDfv4ybVIuAl8+/AAAAAAAA4D9wynMJZA3TvzABHP+qwN+/AAAAAAAA4D9wynMJZA3TPzABHP+qwN+/AAAAAAAA4L8AAAAAAAAAAJmzEvkxhYq/AAAAAAAA4D8AAAAAAAAAAMjRsuM5lWQ/",
+        "faces": "AAAAAAEAAAAJAAAACAAAAAEAAAACAAAACgAAAAkAAAACAAAAAwAAAAsAAAAKAAAAAwAAAAQAAAAMAAAACwAAAAQAAAAFAAAADQAAAAwAAAAFAAAABgAAAA4AAAANAAAABgAAAAcAAAAPAAAADgAAAAcAAAAAAAAACAAAAA8AAAAIAAAACQAAABEAAAAQAAAACQAAAAoAAAASAAAAEQAAAAoAAAALAAAAEwAAABIAAAALAAAADAAAABQAAAATAAAADAAAAA0AAAAVAAAAFAAAAA0AAAAOAAAAFgAAABUAAAAOAAAADwAAABcAAAAWAAAADwAAAAgAAAAQAAAAFwAAAAEAAAAAAAAAGAAAAP////8CAAAAAQAAABgAAAD/////AwAAAAIAAAAYAAAA/////wQAAAADAAAAGAAAAP////8FAAAABAAAABgAAAD/////BgAAAAUAAAAYAAAA/////wcAAAAGAAAAGAAAAP////8AAAAABwAAABgAAAD/////EAAAABEAAAAZAAAA/////xEAAAASAAAAGQAAAP////8SAAAAEwAAABkAAAD/////EwAAABQAAAAZAAAA/////xQAAAAVAAAAGQAAAP////8VAAAAFgAAABkAAAD/////FgAAABcAAAAZAAAA/////xcAAAAQAAAAGQAAAP////8=",
+        "smooth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+      },
+      "texture": {
+        "material": "metal",
+        "seed": 81,
+        "resolution": 256,
+        "color_a": "#b1874e",
+        "color_b": "#f3cd85",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.37,
+          "metallic": 0.78,
+          "normal_strength": 0.22
+        }
+      }
+    },
+    {
+      "name": "Кайма медальона",
+      "shape": "surface",
+      "size": [
+        0.02400000000000002,
+        0.1176,
+        0.14626500000000003
+      ],
+      "center": [
+        0.391,
+        0.0,
+        0.4476325
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "surface": {
+        "vertices": "AAAAAAAA4L/kr9lRi5DfP/g43c1sI9C/AAAAAAAA4L/kr9lRi5DfPySq0CxzK88/AAAAAAAA4L+nHlhdjDPUP8Zfs6MWId8/AAAAAAAA4L+nHlhdjDPUv8Zfs6MWId8/AAAAAAAA4L/kr9lRi5DfvySq0CxzK88/AAAAAAAA4L/kr9lRi5Dfv/g43c1sI9C/AAAAAAAA4L+8nIKXU/DSv/3//////9+/AAAAAAAA4L+8nIKXU/DSP/3//////9+/VVVVVVVVtb8AAAAAAADgP1maOIzV1s+/VVVVVVVVtb8AAAAAAADgP3MYq62/PdA/VVVVVVVVtb97FK5H4XrUPwIAAAAAAOA/VVVVVVVVtb97FK5H4XrUvwIAAAAAAOA/VVVVVVVVtb8AAAAAAADgv3MYq62/PdA/VVVVVVVVtb8AAAAAAADgv1maOIzV1s+/VVVVVVVVtb8zMzMzMzPTv/3//////9+/VVVVVVVVtb8zMzMzMzPTP/3//////9+/q6qqqqqq2j+El1PwcgrePzxQcEbD3s2/q6qqqqqq2j+El1PwcgreP8nmjRVtg84/q6qqqqqq2j9AQisp4znTPy55byb4DN4/q6qqqqqq2j9AQisp4znTvy55byb4DN4/q6qqqqqq2j+El1Pwcgrev8nmjRVtg84/q6qqqqqq2j+El1PwcgrevzxQcEbD3s2/q6qqqqqq2j8cjpj2RAbSv9i1N7rtB96/q6qqqqqq2j8cjpj2RAbSP9i1N7rtB96/AAAAAAAA4D9oRy1C/prdP5h47ja/bs2/AAAAAAAA4D9oRy1C/prdPyUPDAZpE84/AAAAAAAA4D9sTNU+jvLSP4ewpNkSnt0/AAAAAAAA4D9sTNU+jvLSv4ewpNkSnt0/AAAAAAAA4D9oRy1C/prdvyUPDAZpE84/AAAAAAAA4D9oRy1C/prdv5h47ja/bs2/AAAAAAAA4D+l9+daZcPRv0Letarpl92/AAAAAAAA4D+l9+daZcPRP0Letarpl92/AAAAAAAA4L8AAAAAAAAAAL58nO5mtnG/AAAAAAAA4D8AAAAAAAAAAKrRsuM5lWQ/",
+        "faces": "AAAAAAEAAAAJAAAACAAAAAEAAAACAAAACgAAAAkAAAACAAAAAwAAAAsAAAAKAAAAAwAAAAQAAAAMAAAACwAAAAQAAAAFAAAADQAAAAwAAAAFAAAABgAAAA4AAAANAAAABgAAAAcAAAAPAAAADgAAAAcAAAAAAAAACAAAAA8AAAAIAAAACQAAABEAAAAQAAAACQAAAAoAAAASAAAAEQAAAAoAAAALAAAAEwAAABIAAAALAAAADAAAABQAAAATAAAADAAAAA0AAAAVAAAAFAAAAA0AAAAOAAAAFgAAABUAAAAOAAAADwAAABcAAAAWAAAADwAAAAgAAAAQAAAAFwAAABAAAAARAAAAGQAAABgAAAARAAAAEgAAABoAAAAZAAAAEgAAABMAAAAbAAAAGgAAABMAAAAUAAAAHAAAABsAAAAUAAAAFQAAAB0AAAAcAAAAFQAAABYAAAAeAAAAHQAAABYAAAAXAAAAHwAAAB4AAAAXAAAAEAAAABgAAAAfAAAAAQAAAAAAAAAgAAAA/////wIAAAABAAAAIAAAAP////8DAAAAAgAAACAAAAD/////BAAAAAMAAAAgAAAA/////wUAAAAEAAAAIAAAAP////8GAAAABQAAACAAAAD/////BwAAAAYAAAAgAAAA/////wAAAAAHAAAAIAAAAP////8YAAAAGQAAACEAAAD/////GQAAABoAAAAhAAAA/////xoAAAAbAAAAIQAAAP////8bAAAAHAAAACEAAAD/////HAAAAB0AAAAhAAAA/////x0AAAAeAAAAIQAAAP////8eAAAAHwAAACEAAAD/////HwAAABgAAAAhAAAA/////w==",
+        "smooth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+      },
+      "texture": {
+        "material": "metal",
+        "seed": 81,
+        "resolution": 256,
+        "color_a": "#b1874e",
+        "color_b": "#f3cd85",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.37,
+          "metallic": 0.78,
+          "normal_strength": 0.22
+        }
+      }
+    },
+    {
+      "name": "Глухой медальон",
+      "shape": "surface",
+      "size": [
+        0.006999999999999951,
+        0.09920000000000001,
+        0.12338000000000005
+      ],
+      "center": [
+        0.40449999999999997,
+        0.0,
+        0.44769000000000003
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "surface": {
+        "vertices": "uf//////378AAAAAAADgP1qaOIzV1s+/uf//////378AAAAAAADgP2gYq62/PdA/uf//////3797FK5H4XrUPwAAAAAAAOA/uf//////3797FK5H4XrUvwAAAAAAAOA/uf//////378AAAAAAADgv2gYq62/PdA/uf//////378AAAAAAADgv1qaOIzV1s+/uf//////378zMzMzMzPTvwAAAAAAAOC/uf//////378zMzMzMzPTPwAAAAAAAOC/JAAAAAAA4D9877333nvfP2SMWooKUs+/JAAAAAAA4D9877333nvfP9oieFm09s8/JAAAAAAA4D8mFGVCUSbUP/jsWfGIfN8/JAAAAAAA4D8mFGVCUSbUv/jsWfGIfN8/JAAAAAAA4D9877333nvfv9oieFm09s8/JAAAAAAA4D9877333nvfv2SMWooKUs+/JAAAAAAA4D/jwj4u7OPSv/nxIf40e9+/JAAAAAAA4D/jwj4u7OPSP/nxIf40e9+/uf//////378AAAAAAAAAALbOsuM5lWQ/JAAAAAAA4D8AAAAAAAAAALbOsuM5lWQ/",
+        "faces": "AAAAAAEAAAAJAAAACAAAAAEAAAACAAAACgAAAAkAAAACAAAAAwAAAAsAAAAKAAAAAwAAAAQAAAAMAAAACwAAAAQAAAAFAAAADQAAAAwAAAAFAAAABgAAAA4AAAANAAAABgAAAAcAAAAPAAAADgAAAAcAAAAAAAAACAAAAA8AAAABAAAAAAAAABAAAAD/////AgAAAAEAAAAQAAAA/////wMAAAACAAAAEAAAAP////8EAAAAAwAAABAAAAD/////BQAAAAQAAAAQAAAA/////wYAAAAFAAAAEAAAAP////8HAAAABgAAABAAAAD/////AAAAAAcAAAAQAAAA/////wgAAAAJAAAAEQAAAP////8JAAAACgAAABEAAAD/////CgAAAAsAAAARAAAA/////wsAAAAMAAAAEQAAAP////8MAAAADQAAABEAAAD/////DQAAAA4AAAARAAAA/////w4AAAAPAAAAEQAAAP////8PAAAACAAAABEAAAD/////",
+        "smooth": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "texture": {
+        "material": "paint",
+        "seed": 47,
+        "resolution": 256,
+        "color_a": "#192d47",
+        "color_b": "#304c73",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.31,
+          "metallic": 0.17,
+          "normal_strength": 0.13
+        }
+      }
+    },
+    {
+      "name": "Розетка · лепесток 1",
+      "shape": "sphere",
+      "size": [
+        0.008,
+        0.029,
+        0.019
+      ],
+      "center": [
+        0.409,
+        0.024,
+        0.448
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 17,
+        "resolution": 256,
+        "color_a": "#24556c",
+        "color_b": "#5bb6bf",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.27,
+          "metallic": 0.1,
+          "normal_strength": 0.12
+        }
+      }
+    },
+    {
+      "name": "Розетка · лепесток 2",
+      "shape": "sphere",
+      "size": [
+        0.008,
+        0.029,
+        0.019
+      ],
+      "center": [
+        0.409,
+        0.012000000000000004,
+        0.4739807621135332
+      ],
+      "rotation": [
+        60.0,
+        0.0,
+        0.0
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 17,
+        "resolution": 256,
+        "color_a": "#24556c",
+        "color_b": "#5bb6bf",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.27,
+          "metallic": 0.1,
+          "normal_strength": 0.12
+        }
+      }
+    },
+    {
+      "name": "Розетка · лепесток 3",
+      "shape": "sphere",
+      "size": [
+        0.008,
+        0.029,
+        0.019
+      ],
+      "center": [
+        0.409,
+        -0.011999999999999995,
+        0.4739807621135332
+      ],
+      "rotation": [
+        120.0,
+        0.0,
+        0.0
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 17,
+        "resolution": 256,
+        "color_a": "#24556c",
+        "color_b": "#5bb6bf",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.27,
+          "metallic": 0.1,
+          "normal_strength": 0.12
+        }
+      }
+    },
+    {
+      "name": "Розетка · лепесток 4",
+      "shape": "sphere",
+      "size": [
+        0.008,
+        0.029,
+        0.019
+      ],
+      "center": [
+        0.409,
+        -0.024,
+        0.448
+      ],
+      "rotation": [
+        180.0,
+        0.0,
+        0.0
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 17,
+        "resolution": 256,
+        "color_a": "#24556c",
+        "color_b": "#5bb6bf",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.27,
+          "metallic": 0.1,
+          "normal_strength": 0.12
+        }
+      }
+    },
+    {
+      "name": "Розетка · лепесток 5",
+      "shape": "sphere",
+      "size": [
+        0.008,
+        0.029,
+        0.019
+      ],
+      "center": [
+        0.409,
+        -0.01200000000000001,
+        0.42201923788646684
+      ],
+      "rotation": [
+        240.0,
+        0.0,
+        0.0
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 17,
+        "resolution": 256,
+        "color_a": "#24556c",
+        "color_b": "#5bb6bf",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.27,
+          "metallic": 0.1,
+          "normal_strength": 0.12
+        }
+      }
+    },
+    {
+      "name": "Розетка · лепесток 6",
+      "shape": "sphere",
+      "size": [
+        0.008,
+        0.029,
+        0.019
+      ],
+      "center": [
+        0.409,
+        0.012000000000000004,
+        0.42201923788646684
+      ],
+      "rotation": [
+        300.0,
+        0.0,
+        0.0
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 17,
+        "resolution": 256,
+        "color_a": "#24556c",
+        "color_b": "#5bb6bf",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.27,
+          "metallic": 0.1,
+          "normal_strength": 0.12
+        }
+      }
+    },
+    {
+      "name": "Жемчужина розетки",
+      "shape": "sphere",
+      "size": [
+        0.011,
+        0.019,
+        0.02
+      ],
+      "center": [
+        0.411,
+        0.0,
+        0.448
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 61,
+        "resolution": 256,
+        "color_a": "#c6cdc0",
+        "color_b": "#fcf2d8",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.32,
+          "metallic": 0.06,
+          "normal_strength": 0.11
+        }
+      }
+    },
+    {
+      "name": "Серебряное крыло · лицо",
+      "shape": "extrusion",
+      "size": [
+        0.446,
+        0.08800000000000002,
+        0.007
+      ],
+      "center": [
+        -0.023999999999999994,
+        -0.05,
+        0.347
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "outline": [
+        [
+          0.08071749,
+          0.01136364
+        ],
+        [
+          0.132287,
+          0.0
+        ],
+        [
+          0.17040359,
+          0.14772727
+        ],
+        [
+          0.26681614,
+          0.11363636
+        ],
+        [
+          0.39686099,
+          0.20454545
+        ],
+        [
+          0.51345291,
+          0.40909091
+        ],
+        [
+          0.62780269,
+          0.34090909
+        ],
+        [
+          0.76457399,
+          0.47727273
+        ],
+        [
+          0.89237668,
+          0.76136364
+        ],
+        [
+          1.0,
+          0.875
+        ],
+        [
+          0.93497758,
+          1.0
+        ],
+        [
+          0.8206278,
+          0.98863636
+        ],
+        [
+          0.66591928,
+          0.81818182
+        ],
+        [
+          0.48654709,
+          0.76136364
+        ],
+        [
+          0.38340807,
+          0.84090909
+        ],
+        [
+          0.2690583,
+          0.73863636
+        ],
+        [
+          0.19506726,
+          0.69318182
+        ],
+        [
+          0.12107623,
+          0.76136364
+        ],
+        [
+          0.04932735,
+          0.61363636
+        ],
+        [
+          0.0,
+          0.36363636
+        ]
+      ],
+      "texture": {
+        "material": "metal",
+        "seed": 31,
+        "resolution": 256,
+        "color_a": "#9caeb7",
+        "color_b": "#f6eed9",
+        "scale": 1.0,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.33,
+          "metallic": 0.84,
+          "normal_strength": 0.23
+        }
+      }
+    },
+    {
+      "name": "Чернь по крылу · лицо",
+      "shape": "extrusion",
+      "size": [
+        0.307,
+        0.05499999999999999,
+        0.004
+      ],
+      "center": [
+        -0.024499999999999994,
+        -0.054,
+        0.35150000000000003
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "outline": [
+        [
+          0.247557,
+          0.07272727
+        ],
+        [
+          0.44625407,
+          0.4
+        ],
+        [
+          0.58306189,
+          0.36363636
+        ],
+        [
+          0.7980456,
+          0.61818182
+        ],
+        [
+          1.0,
+          1.0
+        ],
+        [
+          0.93485342,
+          1.0
+        ],
+        [
+          0.79153094,
+          0.8
+        ],
+        [
+          0.62540717,
+          0.65454545
+        ],
+        [
+          0.46905537,
+          0.67272727
+        ],
+        [
+          0.29641694,
+          0.34545455
+        ],
+        [
+          0.15309446,
+          0.27272727
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 47,
+        "resolution": 256,
+        "color_a": "#192d47",
+        "color_b": "#304c73",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.31,
+          "metallic": 0.17,
+          "normal_strength": 0.13
+        }
+      }
+    },
+    {
+      "name": "Малое перо · лицо",
+      "shape": "extrusion",
+      "size": [
+        0.097,
+        0.020000000000000018,
+        0.004
+      ],
+      "center": [
+        -0.0615,
+        -0.054,
+        0.331
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "outline": [
+        [
+          0.53608247,
+          0.2
+        ],
+        [
+          1.0,
+          1.0
+        ],
+        [
+          0.77319588,
+          1.0
+        ],
+        [
+          0.40206186,
+          0.45
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 47,
+        "resolution": 256,
+        "color_a": "#192d47",
+        "color_b": "#304c73",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.31,
+          "metallic": 0.17,
+          "normal_strength": 0.13
+        }
+      }
+    },
+    {
+      "name": "Хвостовая насечка · лицо",
+      "shape": "extrusion",
+      "size": [
+        0.059,
+        0.059,
+        0.005
+      ],
+      "center": [
+        -0.2195,
+        -0.051,
+        0.3025
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "outline": [
+        [
+          0.96610169,
+          1.0
+        ],
+        [
+          0.3220339,
+          0.49152542
+        ],
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.25423729,
+          0.15254237
+        ],
+        [
+          0.54237288,
+          0.45762712
+        ],
+        [
+          1.0,
+          0.61016949
+        ]
+      ],
+      "texture": {
+        "material": "metal",
+        "seed": 81,
+        "resolution": 256,
+        "color_a": "#b1874e",
+        "color_b": "#f3cd85",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.37,
+          "metallic": 0.78,
+          "normal_strength": 0.22
+        }
+      }
+    },
+    {
+      "name": "Лоза рукояти · лицо",
+      "shape": "extrusion",
+      "size": [
+        0.142,
+        0.15899999999999997,
+        0.004
+      ],
+      "center": [
+        -0.283,
+        -0.0508,
+        0.2075
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "outline": [
+        [
+          0.14788732,
+          0.0
+        ],
+        [
+          0.33098592,
+          0.0754717
+        ],
+        [
+          0.59859155,
+          0.31446541
+        ],
+        [
+          0.79577465,
+          0.58490566
+        ],
+        [
+          0.92253521,
+          0.83647799
+        ],
+        [
+          1.0,
+          1.0
+        ],
+        [
+          0.95070423,
+          0.93710692
+        ],
+        [
+          0.83802817,
+          0.79874214
+        ],
+        [
+          0.71830986,
+          0.55345912
+        ],
+        [
+          0.53521127,
+          0.33333333
+        ],
+        [
+          0.28873239,
+          0.1509434
+        ],
+        [
+          0.04225352,
+          0.09433962
+        ],
+        [
+          0.0,
+          0.03144654
+        ]
+      ],
+      "texture": {
+        "material": "metal",
+        "seed": 81,
+        "resolution": 256,
+        "color_a": "#b1874e",
+        "color_b": "#f3cd85",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.37,
+          "metallic": 0.78,
+          "normal_strength": 0.22
+        }
+      }
+    },
+    {
+      "name": "Лист лозы · лицо",
+      "shape": "extrusion",
+      "size": [
+        0.013000000000000012,
+        0.046999999999999986,
+        0.003
+      ],
+      "center": [
+        -0.2515,
+        -0.051,
+        0.2265
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "outline": [
+        [
+          1.0,
+          0.5106383
+        ],
+        [
+          1.0,
+          1.0
+        ],
+        [
+          0.07692308,
+          0.59574468
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 17,
+        "resolution": 256,
+        "color_a": "#24556c",
+        "color_b": "#5bb6bf",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.27,
+          "metallic": 0.1,
+          "normal_strength": 0.12
+        }
+      }
+    },
+    {
+      "name": "Лист у медальона · лицо",
+      "shape": "extrusion",
+      "size": [
+        0.02999999999999997,
+        0.021999999999999992,
+        0.003
+      ],
+      "center": [
+        -0.271,
+        -0.051,
+        0.18
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "outline": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.63333333,
+          0.36363636
+        ],
+        [
+          1.0,
+          1.0
+        ],
+        [
+          0.5,
+          0.86363636
+        ]
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 17,
+        "resolution": 256,
+        "color_a": "#24556c",
+        "color_b": "#5bb6bf",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.27,
+          "metallic": 0.1,
+          "normal_strength": 0.12
+        }
+      }
+    },
+    {
+      "name": "Печать двора · лицо",
+      "shape": "cylinder",
+      "size": [
+        0.067,
+        0.067,
+        0.016
+      ],
+      "center": [
+        -0.202,
+        -0.055,
+        0.336
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "texture": {
+        "material": "metal",
+        "seed": 81,
+        "resolution": 256,
+        "color_a": "#b1874e",
+        "color_b": "#f3cd85",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.37,
+          "metallic": 0.78,
+          "normal_strength": 0.22
+        }
+      }
+    },
+    {
+      "name": "Лазурь печати · лицо",
+      "shape": "sphere",
+      "size": [
+        0.051,
+        0.014,
+        0.05
+      ],
+      "center": [
+        -0.202,
+        -0.067,
+        0.336
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 47,
+        "resolution": 256,
+        "color_a": "#192d47",
+        "color_b": "#304c73",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.31,
+          "metallic": 0.17,
+          "normal_strength": 0.13
+        }
+      }
+    },
+    {
+      "name": "Путеводная звезда · лицо",
+      "shape": "extrusion",
+      "size": [
+        0.03400000000000003,
+        0.03200000000000003,
+        0.003
+      ],
+      "center": [
+        -0.202,
+        -0.073,
+        0.336
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "outline": [
+        [
+          0.395,
+          0.605
+        ],
+        [
+          0.0,
+          0.5
+        ],
+        [
+          0.395,
+          0.395
+        ],
+        [
+          0.5,
+          0.0
+        ],
+        [
+          0.605,
+          0.395
+        ],
+        [
+          1.0,
+          0.5
+        ],
+        [
+          0.605,
+          0.605
+        ],
+        [
+          0.5,
+          1.0
+        ]
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 61,
+        "resolution": 256,
+        "color_a": "#c6cdc0",
+        "color_b": "#fcf2d8",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.32,
+          "metallic": 0.06,
+          "normal_strength": 0.11
+        }
+      }
+    },
+    {
+      "name": "Чернь венца · лицо",
+      "shape": "extrusion",
+      "size": [
+        0.374,
+        0.028000000000000025,
+        0.003
+      ],
+      "center": [
+        0.08600000000000001,
+        -0.046,
+        0.43
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "outline": [
+        [
+          0.0828877,
+          0.14285714
+        ],
+        [
+          0.35828877,
+          0.35714286
+        ],
+        [
+          0.80213904,
+          0.75
+        ],
+        [
+          1.0,
+          0.96428571
+        ],
+        [
+          0.86096257,
+          1.0
+        ],
+        [
+          0.51336898,
+          0.64285714
+        ],
+        [
+          0.09358289,
+          0.32142857
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 47,
+        "resolution": 256,
+        "color_a": "#192d47",
+        "color_b": "#304c73",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.31,
+          "metallic": 0.17,
+          "normal_strength": 0.13
+        }
+      }
+    },
+    {
+      "name": "Серебряное крыло · оборот",
+      "shape": "extrusion",
+      "size": [
+        0.446,
+        0.08800000000000002,
+        0.007
+      ],
+      "center": [
+        -0.023999999999999994,
+        0.05,
+        0.347
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "outline": [
+        [
+          0.08071749,
+          0.01136364
+        ],
+        [
+          0.132287,
+          0.0
+        ],
+        [
+          0.17040359,
+          0.14772727
+        ],
+        [
+          0.26681614,
+          0.11363636
+        ],
+        [
+          0.39686099,
+          0.20454545
+        ],
+        [
+          0.51345291,
+          0.40909091
+        ],
+        [
+          0.62780269,
+          0.34090909
+        ],
+        [
+          0.76457399,
+          0.47727273
+        ],
+        [
+          0.89237668,
+          0.76136364
+        ],
+        [
+          1.0,
+          0.875
+        ],
+        [
+          0.93497758,
+          1.0
+        ],
+        [
+          0.8206278,
+          0.98863636
+        ],
+        [
+          0.66591928,
+          0.81818182
+        ],
+        [
+          0.48654709,
+          0.76136364
+        ],
+        [
+          0.38340807,
+          0.84090909
+        ],
+        [
+          0.2690583,
+          0.73863636
+        ],
+        [
+          0.19506726,
+          0.69318182
+        ],
+        [
+          0.12107623,
+          0.76136364
+        ],
+        [
+          0.04932735,
+          0.61363636
+        ],
+        [
+          0.0,
+          0.36363636
+        ]
+      ],
+      "texture": {
+        "material": "metal",
+        "seed": 31,
+        "resolution": 256,
+        "color_a": "#9caeb7",
+        "color_b": "#f6eed9",
+        "scale": 1.0,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.33,
+          "metallic": 0.84,
+          "normal_strength": 0.23
+        }
+      }
+    },
+    {
+      "name": "Чернь по крылу · оборот",
+      "shape": "extrusion",
+      "size": [
+        0.307,
+        0.05499999999999999,
+        0.004
+      ],
+      "center": [
+        -0.024499999999999994,
+        0.054,
+        0.35150000000000003
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "outline": [
+        [
+          0.247557,
+          0.07272727
+        ],
+        [
+          0.44625407,
+          0.4
+        ],
+        [
+          0.58306189,
+          0.36363636
+        ],
+        [
+          0.7980456,
+          0.61818182
+        ],
+        [
+          1.0,
+          1.0
+        ],
+        [
+          0.93485342,
+          1.0
+        ],
+        [
+          0.79153094,
+          0.8
+        ],
+        [
+          0.62540717,
+          0.65454545
+        ],
+        [
+          0.46905537,
+          0.67272727
+        ],
+        [
+          0.29641694,
+          0.34545455
+        ],
+        [
+          0.15309446,
+          0.27272727
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 47,
+        "resolution": 256,
+        "color_a": "#192d47",
+        "color_b": "#304c73",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.31,
+          "metallic": 0.17,
+          "normal_strength": 0.13
+        }
+      }
+    },
+    {
+      "name": "Малое перо · оборот",
+      "shape": "extrusion",
+      "size": [
+        0.097,
+        0.020000000000000018,
+        0.004
+      ],
+      "center": [
+        -0.0615,
+        0.054,
+        0.331
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "outline": [
+        [
+          0.53608247,
+          0.2
+        ],
+        [
+          1.0,
+          1.0
+        ],
+        [
+          0.77319588,
+          1.0
+        ],
+        [
+          0.40206186,
+          0.45
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 47,
+        "resolution": 256,
+        "color_a": "#192d47",
+        "color_b": "#304c73",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.31,
+          "metallic": 0.17,
+          "normal_strength": 0.13
+        }
+      }
+    },
+    {
+      "name": "Хвостовая насечка · оборот",
+      "shape": "extrusion",
+      "size": [
+        0.059,
+        0.059,
+        0.005
+      ],
+      "center": [
+        -0.2195,
+        0.051,
+        0.3025
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "outline": [
+        [
+          0.96610169,
+          1.0
+        ],
+        [
+          0.3220339,
+          0.49152542
+        ],
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.25423729,
+          0.15254237
+        ],
+        [
+          0.54237288,
+          0.45762712
+        ],
+        [
+          1.0,
+          0.61016949
+        ]
+      ],
+      "texture": {
+        "material": "metal",
+        "seed": 81,
+        "resolution": 256,
+        "color_a": "#b1874e",
+        "color_b": "#f3cd85",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.37,
+          "metallic": 0.78,
+          "normal_strength": 0.22
+        }
+      }
+    },
+    {
+      "name": "Лоза рукояти · оборот",
+      "shape": "extrusion",
+      "size": [
+        0.142,
+        0.15899999999999997,
+        0.004
+      ],
+      "center": [
+        -0.283,
+        0.0508,
+        0.2075
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "outline": [
+        [
+          0.14788732,
+          0.0
+        ],
+        [
+          0.33098592,
+          0.0754717
+        ],
+        [
+          0.59859155,
+          0.31446541
+        ],
+        [
+          0.79577465,
+          0.58490566
+        ],
+        [
+          0.92253521,
+          0.83647799
+        ],
+        [
+          1.0,
+          1.0
+        ],
+        [
+          0.95070423,
+          0.93710692
+        ],
+        [
+          0.83802817,
+          0.79874214
+        ],
+        [
+          0.71830986,
+          0.55345912
+        ],
+        [
+          0.53521127,
+          0.33333333
+        ],
+        [
+          0.28873239,
+          0.1509434
+        ],
+        [
+          0.04225352,
+          0.09433962
+        ],
+        [
+          0.0,
+          0.03144654
+        ]
+      ],
+      "texture": {
+        "material": "metal",
+        "seed": 81,
+        "resolution": 256,
+        "color_a": "#b1874e",
+        "color_b": "#f3cd85",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.37,
+          "metallic": 0.78,
+          "normal_strength": 0.22
+        }
+      }
+    },
+    {
+      "name": "Лист лозы · оборот",
+      "shape": "extrusion",
+      "size": [
+        0.013000000000000012,
+        0.046999999999999986,
+        0.003
+      ],
+      "center": [
+        -0.2515,
+        0.051,
+        0.2265
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "outline": [
+        [
+          1.0,
+          0.5106383
+        ],
+        [
+          1.0,
+          1.0
+        ],
+        [
+          0.07692308,
+          0.59574468
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 17,
+        "resolution": 256,
+        "color_a": "#24556c",
+        "color_b": "#5bb6bf",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.27,
+          "metallic": 0.1,
+          "normal_strength": 0.12
+        }
+      }
+    },
+    {
+      "name": "Лист у медальона · оборот",
+      "shape": "extrusion",
+      "size": [
+        0.02999999999999997,
+        0.021999999999999992,
+        0.003
+      ],
+      "center": [
+        -0.271,
+        0.051,
+        0.18
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "outline": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.63333333,
+          0.36363636
+        ],
+        [
+          1.0,
+          1.0
+        ],
+        [
+          0.5,
+          0.86363636
+        ]
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 17,
+        "resolution": 256,
+        "color_a": "#24556c",
+        "color_b": "#5bb6bf",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.27,
+          "metallic": 0.1,
+          "normal_strength": 0.12
+        }
+      }
+    },
+    {
+      "name": "Печать двора · оборот",
+      "shape": "cylinder",
+      "size": [
+        0.067,
+        0.067,
+        0.016
+      ],
+      "center": [
+        -0.202,
+        0.055,
+        0.336
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "texture": {
+        "material": "metal",
+        "seed": 81,
+        "resolution": 256,
+        "color_a": "#b1874e",
+        "color_b": "#f3cd85",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.37,
+          "metallic": 0.78,
+          "normal_strength": 0.22
+        }
+      }
+    },
+    {
+      "name": "Лазурь печати · оборот",
+      "shape": "sphere",
+      "size": [
+        0.051,
+        0.014,
+        0.05
+      ],
+      "center": [
+        -0.202,
+        0.067,
+        0.336
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 47,
+        "resolution": 256,
+        "color_a": "#192d47",
+        "color_b": "#304c73",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.31,
+          "metallic": 0.17,
+          "normal_strength": 0.13
+        }
+      }
+    },
+    {
+      "name": "Путеводная звезда · оборот",
+      "shape": "extrusion",
+      "size": [
+        0.03400000000000003,
+        0.03200000000000003,
+        0.003
+      ],
+      "center": [
+        -0.202,
+        0.073,
+        0.336
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "outline": [
+        [
+          0.395,
+          0.605
+        ],
+        [
+          0.0,
+          0.5
+        ],
+        [
+          0.395,
+          0.395
+        ],
+        [
+          0.5,
+          0.0
+        ],
+        [
+          0.605,
+          0.395
+        ],
+        [
+          1.0,
+          0.5
+        ],
+        [
+          0.605,
+          0.605
+        ],
+        [
+          0.5,
+          1.0
+        ]
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 61,
+        "resolution": 256,
+        "color_a": "#c6cdc0",
+        "color_b": "#fcf2d8",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.32,
+          "metallic": 0.06,
+          "normal_strength": 0.11
+        }
+      }
+    },
+    {
+      "name": "Чернь венца · оборот",
+      "shape": "extrusion",
+      "size": [
+        0.374,
+        0.028000000000000025,
+        0.003
+      ],
+      "center": [
+        0.08600000000000001,
+        0.046,
+        0.43
+      ],
+      "rotation": [
+        90.0,
+        0.0,
+        0.0
+      ],
+      "outline": [
+        [
+          0.0828877,
+          0.14285714
+        ],
+        [
+          0.35828877,
+          0.35714286
+        ],
+        [
+          0.80213904,
+          0.75
+        ],
+        [
+          1.0,
+          0.96428571
+        ],
+        [
+          0.86096257,
+          1.0
+        ],
+        [
+          0.51336898,
+          0.64285714
+        ],
+        [
+          0.09358289,
+          0.32142857
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 47,
+        "resolution": 256,
+        "color_a": "#192d47",
+        "color_b": "#304c73",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.31,
+          "metallic": 0.17,
+          "normal_strength": 0.13
+        }
+      }
+    },
+    {
+      "name": "Набалдашник · старое серебро",
+      "shape": "sphere",
+      "size": [
+        0.08,
+        0.096,
+        0.077
+      ],
+      "center": [
+        -0.357,
+        0.0,
+        0.122
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "texture": {
+        "material": "metal",
+        "seed": 31,
+        "resolution": 256,
+        "color_a": "#9caeb7",
+        "color_b": "#f6eed9",
+        "scale": 1.0,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.33,
+          "metallic": 0.84,
+          "normal_strength": 0.23
+        }
+      }
+    },
+    {
+      "name": "Бирюза навершия · лицо",
+      "shape": "sphere",
+      "size": [
+        0.041,
+        0.02,
+        0.044
+      ],
+      "center": [
+        -0.358,
+        -0.045,
+        0.122
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 17,
+        "resolution": 256,
+        "color_a": "#24556c",
+        "color_b": "#5bb6bf",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.27,
+          "metallic": 0.1,
+          "normal_strength": 0.12
+        }
+      }
+    },
+    {
+      "name": "Бирюза навершия · оборот",
+      "shape": "sphere",
+      "size": [
+        0.041,
+        0.02,
+        0.044
+      ],
+      "center": [
+        -0.358,
+        0.045,
+        0.122
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "texture": {
+        "material": "paint",
+        "seed": 17,
+        "resolution": 256,
+        "color_a": "#24556c",
+        "color_b": "#5bb6bf",
+        "scale": 1.25,
+        "motif": "none",
+        "accent": null,
+        "pbr": {
+          "roughness": 0.27,
+          "metallic": 0.1,
+          "normal_strength": 0.12
+        }
+      }
+    }
+  ],
+  "detail": "medium",
+  "style": "standard"
+}
