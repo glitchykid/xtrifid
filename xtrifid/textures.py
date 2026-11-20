@@ -1,4 +1,4 @@
-"""Portable tileable colour maps and object-space UV charts shared by OBJ and OpenGL."""
+"""Portable material recipes, colour maps and UV charts shared by export and preview."""
 
 import re
 import struct
@@ -7,6 +7,14 @@ from dataclasses import asdict, dataclass
 from math import isfinite
 
 import numpy as np
+
+from .material_maps import (
+    PBRMaterial,
+    SurfaceTile,
+)
+from .material_maps import metallic_roughness_pixels as metallic_roughness_pixels
+from .material_maps import normal_pixels as normal_pixels
+from .material_maps import pbr_preset as pbr_preset
 
 PALETTES = {
     "wood": ("#55301d", "#dba674"),
@@ -30,8 +38,11 @@ class TextureSpec:
     scale: float
     motif: str = "none"
     accent: str | None = None
+    pbr: PBRMaterial | None = None
 
     def __post_init__(self):
+        if self.pbr is not None and not isinstance(self.pbr, PBRMaterial):
+            raise ValueError("Некорректные параметры физического материала")
         if not isinstance(self.material, str) or self.material not in PALETTES:
             raise ValueError("Неизвестный материал текстуры")
         if type(self.seed) is not int or not 0 <= self.seed <= 2**31 - 1:
@@ -69,10 +80,14 @@ class TextureSpec:
             data.get("scale", 1.0),
             data.get("motif", "none"),
             data.get("accent"),
+            None if data.get("pbr") is None else PBRMaterial.parse(data["pbr"]),
         )
 
     def data(self):
-        return asdict(self)
+        data = asdict(self)
+        if self.pbr is None:
+            del data["pbr"]
+        return data
 
 
 _MATERIAL_WORDS = {
@@ -147,47 +162,27 @@ def texture_working_bytes(parts):
     specs = {p.texture for p in parts if p.texture is not None}
     if not specs:
         return 0
-    # RGB + mipmaps on the GPU, driver staging, largest procedural work array.
-    return sum(8 * s.resolution**2 for s in specs) + 64 * max(s.resolution**2 for s in specs)
-
-
-def _noise(rng, x, y, cols, rows):
-    table = rng.random((rows, cols), dtype=np.float32)
-    u, v = x * cols, y * rows
-    i, j = np.floor(u).astype(int), np.floor(v).astype(int)
-    a, b = u - i, v - j
-    a = (a * a * (3 - 2 * a)).astype(np.float32)
-    b = (b * b * (3 - 2 * b)).astype(np.float32)
-    i2, j2 = (i + 1) % cols, (j + 1) % rows
-    i, j = i % cols, j % rows
-    return (1 - b) * ((1 - a) * table[j, i] + a * table[j, i2]) + b * (
-        (1 - a) * table[j2, i] + a * table[j2, i2]
-    )
+    # Each resident RGB8 tile needs mip levels and driver staging. Generators
+    # and exporters process one material at a time, so share one scratch budget.
+    resident = sum((24 if s.pbr else 8) * s.resolution**2 for s in specs)
+    scratch = max((96 if s.pbr else 64) * s.resolution**2 for s in specs)
+    return resident + scratch
 
 
 def pixels(spec):
     """Top-to-bottom RGB8 image. All pattern frequencies close at the tile boundary."""
     n = spec.resolution
-    rng = np.random.Generator(np.random.PCG64(spec.seed))
-    axis = np.arange(n, dtype=np.float32) / n
-    u, v = axis[None, :], axis[:, None]
-
-    def freq(value):
-        return max(1, min(n // 2, round(value * spec.scale)))
-
-    def noise(x, y):
-        return _noise(rng, u, v, freq(x), freq(y))
-
-    broad = noise(5, 5)
-    grain = noise(47, 47)
-    phase = rng.random() * np.pi * 2
+    tile = SurfaceTile(spec)
+    u, v = tile.u, tile.v
+    broad, grain, phase = tile.broad, tile.grain, tile.phase
+    freq, noise = tile.freq, tile.noise
     tau = 2 * np.pi
     if spec.material == "wood":
-        wave = tau * (freq(12) * u + 0.84 * broad + 0.22 * noise(16, 3)) + phase
+        wave = tile.tree_rings(freq(12))
         rings = ((1 + np.cos(wave)) / 2) ** 5
         values = 0.28 + 0.40 * noise(67, 5) + 0.27 * rings + 0.12 * broad
     elif spec.material == "stone":
-        strata = tau * (freq(2) * u + freq(3) * v + 1.20 * broad + 0.28 * noise(19, 17)) + phase
+        strata = tile.mineral_bands(freq(2), freq(3))
         veins = np.exp(-26 * np.sin(strata) ** 2)
         values = 0.13 + 0.44 * broad + 0.23 * grain + 0.31 * veins
     elif spec.material == "fabric":
@@ -241,7 +236,12 @@ def pixels(spec):
 
 
 def png_bytes(image):
-    height, width, _ = image.shape
+    if image.dtype != np.uint8 or not (
+        image.ndim == 2 or (image.ndim == 3 and image.shape[2] == 3)
+    ):
+        raise ValueError("Для PNG нужна 8-битная одноканальная или RGB-карта")
+    height, width = image.shape[:2]
+    channels = 1 if image.ndim == 2 else 3
 
     def chunk(kind, payload):
         return (
@@ -251,9 +251,9 @@ def png_bytes(image):
             + struct.pack(">I", zlib.crc32(kind + payload))
         )
 
-    rows = np.zeros((height, width * 3 + 1), np.uint8)
-    rows[:, 1:] = image.reshape(height, width * 3)
-    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    rows = np.zeros((height, width * channels + 1), np.uint8)
+    rows[:, 1:] = image.reshape(height, width * channels)
+    header = struct.pack(">IIBBBBB", width, height, 8, 0 if channels == 1 else 2, 0, 0, 0)
     return (
         b"\x89PNG\r\n\x1a\n"
         + chunk(b"IHDR", header)
