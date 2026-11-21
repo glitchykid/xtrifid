@@ -16,7 +16,7 @@ jobs:
           git fetch --depth=1 origin "$GITHUB_SHA"
           git checkout --detach FETCH_HEAD
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-      - name: Build and test the studio including all seven projects
+      - name: Build and test the studio including the complete art collection
         run: |
           docker compose config --quiet
           docker compose build tests

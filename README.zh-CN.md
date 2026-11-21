@@ -4,7 +4,7 @@
 
 在 GTK 中根据文字或参考图片创建可编辑的 3D 模型。可以检查网格，模拟布料、毛发和液体，并为各部件设置材质和表面凹凸。长度单位为米，界面语言为俄语。
 
-Xtrifid 0.7.0 提供七个可编辑的 Game Ready 示例，包括月之剑、复古光能枪、孔雀羽扇、沼泽怪兽、提灯、环轨法术和破碎的海浪。打开任意 `.xtri` 文件即可修改各部件的形状和材质。 [查看模型](https://github.com/glitchykid/xtrifid/blob/main/examples/art-studies/gallery.jpg) · [下载 XTRI 和 GLB 文件](https://github.com/glitchykid/xtrifid/releases/download/art-studies-1/xtrifid-art-studies.zip)
+Xtrifid 0.7.0 提供八个可编辑的 Game Ready 示例，包括月之剑、复古光能枪、仪仗手枪、孔雀羽扇、沼泽怪兽、提灯、环轨法术和破碎的海浪。打开任意 `.xtri` 文件即可修改各部件的形状和材质。 [查看模型](https://github.com/glitchykid/xtrifid/blob/main/examples/art-studies/gallery.jpg) · [下载 XTRI 和 GLB 文件](https://github.com/glitchykid/xtrifid/releases/download/art-studies-1/xtrifid-art-studies.zip)
 
 ## Linux 可执行文件
 
